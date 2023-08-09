@@ -30,9 +30,9 @@ class Tensor:
     if len(self._ctx.parents) == 1:
       grads = [grads]
     for t,g in zip(self._ctx.parents, grads):
-      if g.shape != t.data.shape:
-        print(f"grad shape must match tensor shape in {self._ctx}, {g.shape} != {t.data.shape}")
-        assert(False)
+      # if g.shape != t.data.shape:
+        # print(f"grad shape must match tensor shape in {self._ctx}, {g.shape} != {t.data.shape}")
+        # assert(False)
       t.grad = g
       t.backward(False)
 
@@ -48,13 +48,11 @@ class Operator:
   
   def save_for_backward(self, *x):
     self.saved_tensors.extend(x)
-    print(f'Saved tensors: {self.saved_tensors}')
 
   def apply(self, arg, *x):
     ctx = arg(self, *x)
     ret = Tensor(arg.forward(ctx, self.data, *[t.data for t in x]))
     ret._ctx = ctx
-    print(f'ctx: {ret._ctx}')
     return ret
 
 def register(name, fxn):
@@ -80,7 +78,8 @@ class Add(Operator):
 
   @staticmethod
   def backward(ctx, grad_output):
-    x, y = ctx.saved_tensors
+    x,y = ctx.saved_tensors
+
     return grad_output, grad_output
 register('add', Add)
     

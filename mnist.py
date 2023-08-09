@@ -18,13 +18,18 @@ def layer_init(m, h):
   ret = np.random.uniform(-1., 1., size=(m,h))/np.sqrt(m*h)
   return ret.astype(np.float32)
 
+def bias_init(h):
+  return np.zeros((h,), dtype=np.float32)
+
+# The problem comes when adding the bias 
+lr = 0.01
+BS = 64
 
 
 l1 = Tensor(layer_init(28*28, 128))
 l2 = Tensor(layer_init(128, 10))
-
-lr = 0.01
-BS = 64
+b1 = Tensor(bias_init(128))
+b2 = Tensor(bias_init(10))
 losses, accuracies = [], []
 for i in (t := trange(1000)):
   samp = np.random.randint(0, X_train.shape[0], size=(BS))  
@@ -34,8 +39,10 @@ for i in (t := trange(1000)):
   y[range(y.shape[0]),Y] = -1.0
   y = Tensor(y)
   x = x.dot(l1)
+  x = x.add(b1)
   x = x.relu()
-  x = x_l2 = x.dot(l2)
+  x = x.dot(l2)
+  x = x_l2 = x.add(b2)
   x = x.logsoftmax()
   x = x.mul(y)
   x = x.mean()
