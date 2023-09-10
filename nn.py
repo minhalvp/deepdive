@@ -1,5 +1,7 @@
-from tensor import register, Tensor
+from tensor import Tensor
 import numpy as np
+import cupy as cp
+
 # TODO - implement the following:
 # 1. Linear Layers
 # 2. something like nn.sequential
@@ -32,6 +34,11 @@ class Linear(Layer):
     x = x.dot(self.params["LinearW"])
     x = x.add(self.params["LinearB"])
     return x
+  
+  def to(self, device):
+    for name, p in self.params.items():
+      self.params[name] = p.to(device)
+    return self
 
 class ReLU():
   def __call__(self, x):
@@ -56,3 +63,14 @@ class Sequential:
     for layer in self.layers:
       if isinstance(layer, Layer):
         layer.step(lr)
+
+  def to(self, device):
+    for layer in self.layers:
+      if isinstance(layer, Layer):
+        layer.to(device)
+    global np
+    if device == "cuda":
+      np = cp
+    else:
+      np = np
+    return self

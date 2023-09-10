@@ -1,19 +1,28 @@
 from functools import partialmethod
+import cupy as cp
 import numpy as np
 
 class Tensor:
-  
-  def __init__(self, data: np.ndarray):
-    self.data = data
-    self.grad = None
+  def __init__(self, data, grad=None, device=None):
+    self.grad = grad
+    self.device = device
+    if device == "cuda":
+      global np
+      np = cp 
+    else:
+      np = np
 
+    self.data = np.array(data)
     # internal variables used for autograd graph construction
     self._ctx = None
   def __repr__(self):
     return f"Tensor({self.data})"
 
   def __str__(self):
-    return f"Tensor {self.data} with grad {self.grad}"
+    return f"Tensor {self.data} with grad {self.grad} on device {self.device}"
+  
+  def to(self, device):
+    return Tensor(self.data, device=device)
 
   def backward(self, allow_fill=True):
     if self._ctx is None:
@@ -141,3 +150,15 @@ class LogSoftmax(Operator):
     output, = ctx.saved_tensors
     return grad_output - np.exp(output)*grad_output.sum(axis=1).reshape((-1, 1))
 register('logsoftmax', LogSoftmax)
+
+class MSE(Operator):
+  @staticmethod
+  def forward(ctx, input, target):
+    ctx.save_for_backward(input, target)
+    return np.array((input - target)**2)
+
+  @staticmethod
+  def backward(ctx, grad_output):
+    input, target = ctx.saved_tensors
+    return 2*(input - target), -2*(input - target)
+register('mse', MSE)
