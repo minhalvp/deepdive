@@ -60,7 +60,7 @@ class Operator:
 
   def apply(self, arg, *x):
     ctx = arg(self, *x)
-    ret = Tensor(arg.forward(ctx, self.data, *[t.data for t in x]))
+    ret = Tensor(arg.forward(ctx, self.data, *[t.data if isinstance(t, Tensor) else t for t in x]))
     ret._ctx = ctx
     return ret
 
@@ -162,3 +162,42 @@ class MSE(Operator):
     input, target = ctx.saved_tensors
     return 2*(input - target), -2*(input - target)
 register('mse', MSE)
+
+class Conv2d(Operator):
+  @staticmethod
+  def forward(ctx, input, weight, padding, stride):
+    ctx.save_for_backward(input, weight)
+    N, C, H, W = input.shape
+    F, C, HH, WW = weight.shape
+    assert (H + 2 * padding - HH) % stride == 0
+    assert (W + 2 * padding - WW) % stride == 0
+    out_h = (H + 2 * padding - HH) // stride + 1
+    out_w = (W + 2 * padding - WW) // stride + 1
+    input_pad = np.pad(input, ((0, 0), (0, 0), (padding, padding), (padding, padding)), 'constant')
+    output = np.zeros((N, F, out_h, out_w))
+    for n in range(N):
+        for f in range(F):
+            for i in range(out_h):
+                for j in range(out_w):
+                    output[n, f, i, j] = np.sum(input_pad[n, :, i * stride:i * stride + HH, j * stride:j * stride + WW] * weight[f, :, :, :])
+    return output
+
+  @staticmethod
+  def backward(ctx, grad_output):
+    input, weight = ctx.saved_tensors
+    N, C, H, W = input.shape
+    F, C, HH, WW = weight.shape
+    padding = 0
+    stride = 1
+    assert (H + 2 * padding - HH) % stride == 0
+    assert (W + 2 * padding - WW) % stride == 0
+    out_h = (H + 2 * padding - HH) // stride + 1
+    out_w = (W + 2 * padding - WW) // stride + 1
+    grad_weight = np.zeros_like(weight)
+    for n in range(N):
+        for f in range(F):
+            for i in range(out_h):
+                for j in range(out_w):
+                    grad_weight[f, :, :, :] += input[n, :, i * stride:i * stride + HH, j * stride:j * stride + WW] * grad_output[n, f, i, j] 
+    return None, grad_weight
+register('conv2d', Conv2d)
