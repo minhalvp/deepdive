@@ -1,38 +1,73 @@
 import numpy as np
 import torch
 from tensor import Tensor
+from datasets import load_dataset
+import pytest
 
-x_init = np.random.randn(1,3).astype(np.float32)
-W_init = np.random.randn(3,3).astype(np.float32)
-m_init = np.random.randn(1,3).astype(np.float32)
+# mnist = load_dataset('mnist')
 
-def test_deepdive():
-  x = Tensor(x_init)
-  W = Tensor(W_init)
-  m = Tensor(m_init)
-  out = x.dot(W)
-  outr = out.relu()
-  outl = outr.logsoftmax()
-  outm = outl.mul(m)
-  outx = outm.sum()
-  outx.backward()
-  return outx.data, x.grad, W.grad
+# def convert_to_np(example):
+#     example['np_image'] = np.asarray(example['image'])
+#     return example
+# mnist = mnist.map(convert_to_np)
 
-def test_pytorch():
-  x = torch.tensor(x_init, requires_grad=True)
-  W = torch.tensor(W_init, requires_grad=True)
-  m = torch.tensor(m_init)
-  out = x.matmul(W)
-  outr = out.relu()
-  outl = torch.nn.functional.log_softmax(outr, dim=1)
-  outm = outl.mul(m)
-  outx = outm.sum()
-  outx.backward()
-  return outx.detach().numpy(), x.grad, W.grad
+# # Convert X_train, Y_train, X_test, and Y_test to CuPy arrays
+# X_train, Y_train = np.asarray(mnist['train']['np_image']), np.asarray(mnist['train']['label'])
+# X_test, Y_test = np.asarray(mnist['test']['np_image']), np.asarray(mnist['test']['label'])
+def test_mul():
+    x_init = np.random.randn(3, 4).astype(np.float32)
+    y_init = np.random.randn(3, 4).astype(np.float32)
+    X, x = Tensor(x_init), torch.tensor(x_init, requires_grad=True)
+    Y, y = Tensor(y_init), torch.tensor(y_init, requires_grad=True)
 
-for x,y in zip(test_deepdive(), test_pytorch()):
-	print(x,y)
-	np.testing.assert_allclose(x, y, atol=1e-6)
-	
+    Z = X.mul(Y)
+    Z.mean().backward()
+    z = x.mul(y)
+    z.mean().backward()
 
+    np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
+    np.testing.assert_allclose(X.grad, x.grad, atol=1e-6)
+    np.testing.assert_allclose(Y.grad, y.grad, atol=1e-6)
 
+def test_add():
+    x_init = np.random.randn(3, 4).astype(np.float32)
+    y_init = np.random.randn(3, 4).astype(np.float32)
+    X, x = Tensor(x_init), torch.tensor(x_init, requires_grad=True)
+    Y, y = Tensor(y_init), torch.tensor(y_init, requires_grad=True)
+
+    Z = X.add(Y)
+    Z.mean().backward()
+    z = x.add(y)
+    z.mean().backward()
+
+    np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
+    np.testing.assert_allclose(X.grad, x.grad, atol=1e-6)
+    np.testing.assert_allclose(Y.grad, y.grad, atol=1e-6)
+
+def test_conv2d():
+    x_init = np.random.randn(1, 1, 28, 28).astype(np.float32)
+    w_init = np.random.randn(1, 1, 3, 3).astype(np.float32)
+    # x_init = np.random.randn(1, 3, 32, 32).astype(np.float32)
+    # w_init = np.random.randn(3, 1, 5, 5).astype(np.float32)
+    X, x = Tensor(x_init), torch.tensor(x_init, requires_grad=True)
+    Y, y = Tensor(w_init), torch.tensor(w_init, requires_grad=True)
+
+    Z = X.conv2d(Y, 1, 1)
+    Z.mean().backward()
+    z = torch.nn.functional.conv2d(x, y, padding=1, stride=1)
+    z.mean().backward()
+
+    np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
+    np.testing.assert_allclose(Y.grad, y.grad, atol=1e-6)
+
+def test_sum():
+    x_init = np.random.randn(3, 4).astype(np.float32)
+    X, x = Tensor(x_init), torch.tensor(x_init, requires_grad=True)
+
+    Z = X.sum()
+    Z.mean().backward()
+    z = x.sum()
+    z.mean().backward()
+
+    np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
+    np.testing.assert_allclose(X.grad, x.grad, atol=1e-6)

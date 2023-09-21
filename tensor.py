@@ -121,7 +121,6 @@ class Dot(Operator):
     return grad_input, grad_weight
 register('dot', Dot)
 
-
 class Sum(Operator):
   @staticmethod
   def forward(ctx, input):
@@ -166,38 +165,53 @@ register('mse', MSE)
 class Conv2d(Operator):
   @staticmethod
   def forward(ctx, input, weight, padding, stride):
-    ctx.save_for_backward(input, weight)
-    N, C, H, W = input.shape
-    F, C, HH, WW = weight.shape
+    ctx.save_for_backward(input, weight, padding, stride)
+
+    N, C, W, H = input.shape
+    F, C, WW, HH = weight.shape
+
     assert (H + 2 * padding - HH) % stride == 0
     assert (W + 2 * padding - WW) % stride == 0
+
     out_h = (H + 2 * padding - HH) // stride + 1
     out_w = (W + 2 * padding - WW) // stride + 1
+
     input_pad = np.pad(input, ((0, 0), (0, 0), (padding, padding), (padding, padding)), 'constant')
     output = np.zeros((N, F, out_h, out_w))
+
     for n in range(N):
-        for f in range(F):
-            for i in range(out_h):
-                for j in range(out_w):
-                    output[n, f, i, j] = np.sum(input_pad[n, :, i * stride:i * stride + HH, j * stride:j * stride + WW] * weight[f, :, :, :])
+      for f in range(F):
+        for i in range(out_h):
+          for j in range(out_w):
+            output[n, f, i, j] = np.sum(input_pad[n, :, i * stride:i * stride + HH, j * stride:j * stride + WW] * weight[f, :, :, :])
+            
     return output
 
   @staticmethod
   def backward(ctx, grad_output):
-    input, weight = ctx.saved_tensors
-    N, C, H, W = input.shape
+    input, weight, padding, stride = ctx.saved_tensors
+    
+    N, C, H, W = input.shape 
     F, C, HH, WW = weight.shape
-    padding = 0
-    stride = 1
-    assert (H + 2 * padding - HH) % stride == 0
-    assert (W + 2 * padding - WW) % stride == 0
+    
     out_h = (H + 2 * padding - HH) // stride + 1
     out_w = (W + 2 * padding - WW) // stride + 1
+
     grad_weight = np.zeros_like(weight)
+
+    # Pad input tensor
+    input_pad = np.pad(input, ((0,0), (0,0), (padding, padding), (padding, padding)), 'constant')
+    
     for n in range(N):
-        for f in range(F):
-            for i in range(out_h):
-                for j in range(out_w):
-                    grad_weight[f, :, :, :] += input[n, :, i * stride:i * stride + HH, j * stride:j * stride + WW] * grad_output[n, f, i, j] 
+      for f in range(F):
+        for i in range(out_h):
+          for j in range(out_w):
+            
+            # Get padded input patch
+            input_patch = input_pad[n, :, i*stride:i*stride+HH, j*stride:j*stride+WW]
+            
+            # Accumulate gradient
+            grad_weight[f] += input_patch * grad_output[n, f, i, j]
+
     return None, grad_weight
 register('conv2d', Conv2d)
