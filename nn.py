@@ -7,6 +7,7 @@ import cupy as cp
 # 2. something like nn.sequential
 # 3. Convolutional Layers 
 # 4. normalization layers
+# 5. Model saving and loading
 
 
 class Layer:
@@ -56,7 +57,12 @@ class Sequential:
     for l in self.layers:
       x = l(x)
     return x
-
+  
+  def save(self, path):
+    model_dict = {}
+    for i, l in enumerate(self.layers):
+      model_dict[f"layer_{i}"] = l.params
+    np.save(path, model_dict)
   def __str__(self) -> str:
     return f"Sequential({', '.join([str(type(l)) for l in self.layers])})"
   def step(self, lr):
