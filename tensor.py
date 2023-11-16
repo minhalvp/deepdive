@@ -1,4 +1,5 @@
 from functools import partialmethod
+
 import cupy as cp
 import numpy as np
 
@@ -13,7 +14,6 @@ class Tensor:
       np = np
 
     self.data = np.array(data)
-    # internal variables used for autograd graph construction
     self._ctx = None
   def __repr__(self):
     return f"Tensor({self.data})"

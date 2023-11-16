@@ -1,6 +1,6 @@
 from tensor import Tensor
-import numpy as np
 import cupy as cp
+import numpy as np
 
 # TODO - implement the following:
 # 1. Linear Layers
@@ -9,17 +9,46 @@ import cupy as cp
 # 4. normalization layers
 # 5. Model saving and loading
 
+class SGD:
+  def __init__(self, params, lr=1e-3):
+    self.params = list(params)
+    self.lr = lr
+  def step(self):
+    for p in self.params:
+      p.data -= self.lr * p.grad
+
+
+class Adam:
+  def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8):
+    self.params = list(params)
+    self.lr = lr
+    self.betas = betas
+    self.eps = eps
+    self.m = [np.zeros_like(p.data) for p in self.params]
+    self.v = [np.zeros_like(p.data) for p in self.params]
+    self.t = 0
+
+  def step(self):
+    self.t += 1
+    for i, p in enumerate(self.params):
+      self.m[i] = self.betas[0] * self.m[i] + (1 - self.betas[0]) * p.grad
+      self.v[i] = self.betas[1] * self.v[i] + (1 - self.betas[1]) * p.grad**2
+      m_hat = self.m[i] / (1 - self.betas[0]**self.t)
+      v_hat = self.v[i] / (1 - self.betas[1]**self.t)
+      p.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
+
 
 class Layer:
   def __init__(self):
     self.params = {}
   
-  def step(self, lr):
+  def step(self, lr, optimizer):
     for p in self.params.values():
       if p.grad.shape != p.data.shape:
         # print(f"Warning: grad shape {p.grad.shape} != data shape {p.data.shape}, assuming batched data and averaging gradients")
         p.grad = p.grad.mean(axis=0)
-      p.data -= lr * p.grad
+    optim = optimizer(self.params.values(), lr=lr)
+    optim.step()
 
 class Linear(Layer):
   def __init__(self, in_features, out_features):
@@ -40,6 +69,18 @@ class Linear(Layer):
     for name, p in self.params.items():
       self.params[name] = p.to(device)
     return self
+  
+class Conv2d(Layer):
+  def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0):
+    super().__init__()
+    self.kernel_size = kernel_size
+    self.stride = stride
+    self.padding = padding
+    w = np.random.uniform(-1., 1., size=(out_channels, in_channels, kernel_size, kernel_size))/np.sqrt(in_channels*out_channels*kernel_size*kernel_size)
+    self.params["Conv2dW"] = Tensor(w)
+
+  def __call__(self, x):
+    x = x.conv2d(self.params["Conv2dW"], self.padding, self.stride)
 
 class ReLU():
   def __call__(self, x):
@@ -65,10 +106,10 @@ class Sequential:
     np.save(path, model_dict)
   def __str__(self) -> str:
     return f"Sequential({', '.join([str(type(l)) for l in self.layers])})"
-  def step(self, lr):
+  def step(self, lr, optimizer):
     for layer in self.layers:
       if isinstance(layer, Layer):
-        layer.step(lr)
+        layer.step(lr, optimizer=optimizer)
 
   def to(self, device):
     for layer in self.layers:
