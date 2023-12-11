@@ -1,5 +1,5 @@
-from tensor import Tensor
-import cupy as cp
+from .tensor import Tensor
+from .utils import import_cupy_else_numpy
 import numpy as np
 
 # TODO - implement the following:
@@ -117,7 +117,7 @@ class Sequential:
         layer.to(device)
     global np
     if device == "cuda":
-      np = cp
+      np = import_cupy_else_numpy()
     else:
       np = np
     return self

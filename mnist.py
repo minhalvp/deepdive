@@ -1,6 +1,6 @@
 import numpy as np
-from tensor import Tensor
-import nn
+from deepdive.tensor import Tensor
+import deepdive.nn as nn
 from tqdm import trange
 from datasets import load_dataset
 
@@ -27,22 +27,22 @@ model = model.to("cuda")
 
 losses, accuracies = [], []
 for i in (t := trange(1000)):
-  samp = np.random.randint(0, X_train.shape[0], size=(BS))  
-  x = Tensor(X_train[samp].reshape((-1, 28*28))).to('cuda')
-  Y = Y_train[samp]
-  y = np.zeros((len(samp),10), np.float32)
-  y[range(y.shape[0]),Y] = -1.0
-  y = Tensor(y).to('cuda')
-  output = model.forward(x)
-  x = output.mul(y)
-  x = x.mean()
-  x.backward()
-  
-  loss = x.data
-  cat = np.argmax(output.data, axis=1).get()
-  accuracy = (cat == Y).mean()
-  losses.append(loss)
-  accuracies.append(accuracy)
-  t.set_description(f"loss {loss} accuracy {accuracy}")
-  # SGD
-  model.step(lr=lr)
+    samp = np.random.randint(0, X_train.shape[0], size=(BS))  
+    x = Tensor(X_train[samp].reshape((-1, 28*28))).to('cuda')
+    Y = Y_train[samp]
+    y = np.zeros((len(samp),10), np.float32)
+    y[range(y.shape[0]),Y] = -1.0
+    y = Tensor(y).to('cuda')
+    output = model.forward(x)
+    x = output.mul(y)
+    x = x.mean()
+    x.backward()
+
+    loss = x.data
+    cat = np.argmax(output.data, axis=1)
+    accuracy = (cat == Y).mean()
+    losses.append(loss)
+    accuracies.append(accuracy)
+    t.set_description(f"loss {loss} accuracy {accuracy}")
+    # SGD
+    model.step(lr=lr, optimizer=nn.SGD)

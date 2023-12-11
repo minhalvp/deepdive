@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "deepdive-ml"
+version = "1.0.0"
+description = "A deep learning library from scratch in python"
+authors = [
+    {name = "Minhal Valiya Peedikakkal", email = "minhaalvp@gmail.com"},
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+]
+dependencies = [
+    "numpy",
+]

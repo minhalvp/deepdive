@@ -3,3 +3,6 @@ usage.ipynb
 .vscode
 __pycache__
 usage.ipynb
+build
+dist
+deepdive_ml.egg-info

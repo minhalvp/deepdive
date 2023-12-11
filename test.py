@@ -1,19 +1,8 @@
 import numpy as np
 import torch
-from tensor import Tensor
+from deepdive.tensor import Tensor
 from datasets import load_dataset
-import pytest
 
-# mnist = load_dataset('mnist')
-
-# def convert_to_np(example):
-#     example['np_image'] = np.asarray(example['image'])
-#     return example
-# mnist = mnist.map(convert_to_np)
-
-# # Convert X_train, Y_train, X_test, and Y_test to CuPy arrays
-# X_train, Y_train = np.asarray(mnist['train']['np_image']), np.asarray(mnist['train']['label'])
-# X_test, Y_test = np.asarray(mnist['test']['np_image']), np.asarray(mnist['test']['label'])
 def test_mul():
     x_init = np.random.randn(3, 4).astype(np.float32)
     y_init = np.random.randn(3, 4).astype(np.float32)

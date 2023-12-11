@@ -1,7 +1,7 @@
 from functools import partialmethod
-
-import cupy as cp
+from .utils import import_cupy_else_numpy
 import numpy as np
+
 
 class Tensor:
   def __init__(self, data, grad=None, device=None):
@@ -9,10 +9,7 @@ class Tensor:
     self.device = device
     if device == "cuda":
       global np
-      np = cp 
-    else:
-      np = np
-
+      np = import_cupy_else_numpy()
     self.data = np.array(data)
     self._ctx = None
   def __repr__(self):
@@ -36,9 +33,9 @@ class Tensor:
     assert(self.grad is not None)
 
     grads = self._ctx.backward(self._ctx, self.grad)
-    if len(self._ctx.parents) == 1:
+    if len(self._ctx.operands) == 1:
       grads = [grads]
-    for t,g in zip(self._ctx.parents, grads):
+    for t,g in zip(self._ctx.operands, grads):
       # if g.shape != t.data.shape:
         # print(f"grad shape must match tensor shape in {self._ctx}, {g.shape} != {t.data.shape}")
         # assert(False)
@@ -51,8 +48,11 @@ class Tensor:
 
 
 class Operator:
+  """
+  Operator class is an abstract class which provides functionality for storing context of each operation for backward propogation
+  """
   def __init__(self, *tensors) -> None:
-    self.parents = tensors
+    self.operands = tensors
     self.saved_tensors = []
   
   def save_for_backward(self, *x):
@@ -65,6 +65,24 @@ class Operator:
     return ret
 
 def register(name, fxn):
+  """
+  Adds a method to the Tensor class. The new method is a partial application of the `apply` method of the `fxn` object.
+
+  :param name: The name of the new method.
+  :type name: str
+  :param fxn: The object whose `apply` method will be partially applied.
+  :type fxn: object
+
+  Example
+  -------
+  If `fxn` is an instance of a class `Mul` with an `apply` method that multiplies its arguments:
+  
+  .. code-block:: python
+
+    register('mul', Mul())
+    t = Tensor([2, 3, 4])
+    t.mul(5)  # This will output a tensor with data [10, 15, 20]
+  """
   setattr(Tensor, name, partialmethod(fxn.apply, fxn))
 
 class Mul(Operator):
