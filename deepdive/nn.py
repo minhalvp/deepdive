@@ -1,5 +1,6 @@
 from .tensor import Tensor
 from .utils import import_cupy_else_numpy
+from abc import ABC, abstractmethod
 import numpy as np
 
 # TODO - implement the following:
@@ -9,33 +10,39 @@ import numpy as np
 # 4. normalization layers
 # 5. Model saving and loading
 
-class SGD:
-  def __init__(self, params, lr=1e-3):
-    self.params = list(params)
-    self.lr = lr
-  def step(self):
-    for p in self.params:
-      p.data -= self.lr * p.grad
+class Optimizer(ABC):
+    def __init__(self, params, lr=1e-3):
+        self.params = list(params)
+        self.lr = lr
+
+    @abstractmethod
+    def step(self):
+        pass
 
 
-class Adam:
-  def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8):
-    self.params = list(params)
-    self.lr = lr
-    self.betas = betas
-    self.eps = eps
-    self.m = [np.zeros_like(p.data) for p in self.params]
-    self.v = [np.zeros_like(p.data) for p in self.params]
-    self.t = 0
+class SGD(Optimizer):
+    def step(self):
+        for p in self.params:
+            p.data -= self.lr * p.grad
 
-  def step(self):
-    self.t += 1
-    for i, p in enumerate(self.params):
-      self.m[i] = self.betas[0] * self.m[i] + (1 - self.betas[0]) * p.grad
-      self.v[i] = self.betas[1] * self.v[i] + (1 - self.betas[1]) * p.grad**2
-      m_hat = self.m[i] / (1 - self.betas[0]**self.t)
-      v_hat = self.v[i] / (1 - self.betas[1]**self.t)
-      p.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
+
+class Adam(Optimizer):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8):
+        super().__init__(params, lr)
+        self.betas = betas
+        self.eps = eps
+        self.m = [np.zeros_like(p.data) for p in self.params]
+        self.v = [np.zeros_like(p.data) for p in self.params]
+        self.t = 0
+
+    def step(self):
+        self.t += 1
+        for i, p in enumerate(self.params):
+            self.m[i] = self.betas[0] * self.m[i] + (1 - self.betas[0]) * p.grad
+            self.v[i] = self.betas[1] * self.v[i] + (1 - self.betas[1]) * p.grad**2
+            m_hat = self.m[i] / (1 - self.betas[0]**self.t)
+            v_hat = self.v[i] / (1 - self.betas[1]**self.t)
+            p.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
 
 
 class Layer:

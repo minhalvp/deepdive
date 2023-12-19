@@ -49,7 +49,7 @@ class Tensor:
 
 class Operator:
   """
-  Operator class is an abstract class which provides functionality for storing context of each operation for backward propogation
+  Operator class is a parent class which provides functionality for storing context of each operation for backward propogation
   """
   def __init__(self, *tensors) -> None:
     self.operands = tensors
