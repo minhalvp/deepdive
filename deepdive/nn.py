@@ -11,22 +11,54 @@ import numpy as np
 # 5. Model saving and loading
 
 class Optimizer(ABC):
+    """
+    Base class for all optimizers
+
+    Attributes
+    ----------
+    params (list): list of parameters to optimize
+    lr (float): learning rate    
+    """
     def __init__(self, params, lr=1e-3):
         self.params = list(params)
         self.lr = lr
 
     @abstractmethod
     def step(self):
+        """
+        Performs a single optimization step. Not implemented in base class. This function should be implemented in all subclasses.
+        """
         pass
 
 
 class SGD(Optimizer):
+    """
+    Stochastic Gradient Descent optimizer
+
+    Attributes
+    ----------
+    params (list): list of parameters to optimize
+    lr (float): learning rate
+    """
     def step(self):
+        """
+        Performs a single optimization step by updating the parameters in the direction of the gradient with the learning rate.
+        """
         for p in self.params:
             p.data -= self.lr * p.grad
 
 
 class Adam(Optimizer):
+    """
+    Adaptive Moment Estimation optimizer
+
+    Attributes
+    ----------
+    params (list): list of parameters to optimize
+    lr (float): learning rate
+    betas (tuple): coefficients used for computing running averages of gradient and its square
+    eps (float): term added to the denominator to improve numerical stability
+    """
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8):
         super().__init__(params, lr)
         self.betas = betas
@@ -36,6 +68,9 @@ class Adam(Optimizer):
         self.t = 0
 
     def step(self):
+        """
+        Performs a single optimization step by updating the parameters in the direction of the gradient with the learning rate. More information can be found in the Analysis algorithms research.
+        """
         self.t += 1
         for i, p in enumerate(self.params):
             self.m[i] = self.betas[0] * self.m[i] + (1 - self.betas[0]) * p.grad
@@ -46,10 +81,25 @@ class Adam(Optimizer):
 
 
 class Layer:
+  """
+  Base class for all layers
+
+  Attributes
+  ----------
+  params (dict): dictionary of parameters
+  """
   def __init__(self):
     self.params = {}
   
   def step(self, lr, optimizer):
+    """
+    Calls the step function of the optimizer on the parameters of all the layers.
+
+    :param lr: learning rate
+    :type lr: float
+    :param optimizer: optimizer to use
+    :type optimizer: Optimizer
+    """
     for p in self.params.values():
       if p.grad.shape != p.data.shape:
         # print(f"Warning: grad shape {p.grad.shape} != data shape {p.data.shape}, assuming batched data and averaging gradients")
