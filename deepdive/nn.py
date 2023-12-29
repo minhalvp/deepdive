@@ -128,6 +128,9 @@ class Linear(Layer):
     return self
   
 class Conv2d(Layer):
+  """
+  FOLLOW THIS RULE -> O = (W - K + 2P) / S + 1
+  """
   def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0):
     super().__init__()
     self.kernel_size = kernel_size
@@ -137,8 +140,19 @@ class Conv2d(Layer):
     self.params["Conv2dW"] = Tensor(w)
 
   def __call__(self, x):
-    x = x.conv2d(self.params["Conv2dW"], self.padding, self.stride)
+    output = x.conv2d(self.params["Conv2dW"], self.padding, self.stride)
+    return output
 
+class ReShape():
+  def __init__(self, shape: tuple) -> None:
+     self.shape = shape
+
+  def __call__(self, x):
+      return x.reshape(self.shape)
+  
+class Flatten():
+  def __call__(self, x):
+    return x.flatten()
 class ReLU():
   def __call__(self, x):
     return x.relu()
@@ -154,8 +168,7 @@ class Sequential:
   def forward(self, x):
     for l in self.layers:
       x = l(x)
-    return x
-  
+    return x  
   def save(self, path):
     model_dict = {}
     for i, l in enumerate(self.layers):

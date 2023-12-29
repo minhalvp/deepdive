@@ -1,6 +1,7 @@
 from deepdive.tensor import Tensor
 from datasets import DatasetDict, Dataset
 import random
+import numpy as np
 # DataLoader
 # Input:
 # - dataset = HF_DATASET
@@ -33,6 +34,9 @@ class DataLoader:
         self.dataset = Dataset.from_list(arr)
     def __iter__(self):
         return self
+    
+    def __len__(self):
+        return len(self.batches)
 
     def __next__(self):
         if self.batch_index >= len(self.batches):
@@ -40,4 +44,5 @@ class DataLoader:
         batch = self.batches[self.batch_index]
         self.batch_index += 1
         return_values = [batch[feature] for feature in batch.features.keys()]
+        return_values = [np.array(return_value) for return_value in return_values]
         return *return_values,

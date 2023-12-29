@@ -1,8 +1,13 @@
-from functools import partialmethod
 from .utils import import_cupy_else_numpy
 import numpy as np
+from functools import partialmethod
+from itertools import product
+import logging
+import os
 
-
+# Logging stuff for later
+# log_level = os.environ.get('LOG')
+# logging.basicConfig(level=log_level)
 class Tensor:
   """
   A class used to represent a Tensor.
@@ -82,9 +87,10 @@ class Tensor:
 
     assert(self.grad is not None)
 
-    grads = self._ctx.backward(self._ctx, self.grad)
+    grads = self._ctx.backward(self._ctx, self.grad) # tuple or np.ndarray
     if len(self._ctx.operands) == 1:
-      grads = [grads]
+      grads = np.expand_dims(grads, axis=0)
+
     for t,g in zip(self._ctx.operands, grads):
       # if g.shape != t.data.shape:
         # print(f"grad shape must match tensor shape in {self._ctx}, {g.shape} != {t.data.shape}")
@@ -502,6 +508,7 @@ class MSE(Operator):
 register('mse', MSE)
 
 class Conv2d(Operator):
+  # https://www.cs.cmu.edu/~aarti/Class/10315_Spring22/315S22_Rec6.pdf
   """
   The Conv2d class implements the 2D convolution operation for tensors and saves the context of the operation.
 
@@ -526,12 +533,8 @@ class Conv2d(Operator):
 
     input_pad = np.pad(input, ((0, 0), (0, 0), (padding, padding), (padding, padding)), 'constant')
     output = np.zeros((N, F, out_h, out_w))
-
-    for n in range(N):
-      for f in range(F):
-        for i in range(out_h):
-          for j in range(out_w):
-            output[n, f, i, j] = np.sum(input_pad[n, :, i * stride:i * stride + HH, j * stride:j * stride + WW] * weight[f, :, :, :])
+    for n, f, i, j in product(range(N), range(F), range(out_h), range(out_w)):
+      output[n, f, i, j] = np.sum(input_pad[n, :, i * stride:i * stride + HH, j * stride:j * stride + WW] * weight[f, :, :, :])
             
     return output
 
@@ -539,27 +542,45 @@ class Conv2d(Operator):
   def backward(ctx, grad_output):
     input, weight, padding, stride = ctx.saved_tensors
     
-    N, C, H, W = input.shape 
-    F, C, HH, WW = weight.shape
-    
+    N, C, H, W = input.shape
+    F, _, HH, WW = weight.shape
     out_h = (H + 2 * padding - HH) // stride + 1
     out_w = (W + 2 * padding - WW) // stride + 1
-
     grad_weight = np.zeros_like(weight)
+    grad_input = np.zeros_like(input)
 
-    # Pad input tensor
     input_pad = np.pad(input, ((0,0), (0,0), (padding, padding), (padding, padding)), 'constant')
     
-    for n in range(N):
-      for f in range(F):
-        for i in range(out_h):
-          for j in range(out_w):
-            
-            # Get padded input patch
-            input_patch = input_pad[n, :, i*stride:i*stride+HH, j*stride:j*stride+WW]
-            
-            # Accumulate gradient
-            grad_weight[f] += input_patch * grad_output[n, f, i, j]
-
-    return None, grad_weight
+    for n, f, i, j in product(range(N), range(F), range(out_h), range(out_w)):      
+      input_patch = input_pad[n, :, i*stride:i*stride+HH, j*stride:j*stride+WW]
+      grad_weight[f] += input_patch * grad_output[n,f,i,j]
+      # grad_input[n,:, i*stride:i*stride+HH, j*stride:j*stride+WW] += weight[f] * grad_output[n,f,i,j]
+    
+    return grad_input, grad_weight
 register('conv2d', Conv2d)
+
+class Reshape(Operator):
+  @staticmethod
+  def forward(ctx, x, shape: tuple):
+    ctx.operands = (ctx.operands[0],)
+    ctx.save_for_backward(x.shape)
+    return x.reshape(shape)
+  @staticmethod
+  def backward(ctx, grad_output):
+    original_shape, = ctx.saved_tensors
+    return grad_output.reshape(original_shape)
+register('reshape', Reshape)
+
+class MAE(Operator):
+  @staticmethod
+  def forward(ctx, input, target):
+    ctx.save_for_backward(input, target)
+    return np.abs(input - target)
+
+  @staticmethod
+  def backward(ctx, grad_output):
+    input, target = ctx.saved_tensors
+    grad_input = grad_output * np.sign(input - target)
+    grad_target = grad_output * -np.sign(input - target)
+    return grad_input, grad_target
+register('mae', MAE)
