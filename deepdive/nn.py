@@ -16,7 +16,7 @@ class Optimizer(ABC):
 
     Attributes
     ----------
-    params (list): list of parameters to optimize
+    params (list): list of parameters from the model
     lr (float): learning rate    
     """
     def __init__(self, params, lr=1e-3):
@@ -86,7 +86,11 @@ class Layer:
 
   Attributes
   ----------
-  params (dict): dictionary of parameters
+  params (dict): dictionary of parameters. The keys are the name of the layer followed by the paramter type (W, B) and the values are the parameter tensors.
+
+  Notes
+  -----
+  Not all layers have both W and B parameters. For example, Conv2d layers only have W parameters.
   """
   def __init__(self):
     self.params = {}
@@ -108,6 +112,14 @@ class Layer:
     optim.step()
 
 class Linear(Layer):
+  """
+  Linear Neural Network Layer
+
+  Attributes
+  ----------
+  in_features (int): number of input features
+  out_features (int): number of output features
+  """
   def __init__(self, in_features, out_features):
     super().__init__()
 
@@ -118,18 +130,52 @@ class Linear(Layer):
 
   def __call__(self, x):
     # Todo: combining the weights and biases into a single tensor so forward pass is 1 operation
+    """
+    Performs a linear transformation on the input tensor and Linear parameters and returns the output tensor.
+
+    :param x: input tensor
+    :type x: Tensor
+
+    :return: output tensor
+    :rtype: Tensor
+    """  
     x = x.dot(self.params["LinearW"])
     x = x.add(self.params["LinearB"])
     return x
   
   def to(self, device):
+    """
+    Moves the parameters of the layer to the specified device.
+
+    :param device: device to move the parameters to
+    :type device: str (either "cpu" or "cuda")
+    """
     for name, p in self.params.items():
       self.params[name] = p.to(device)
     return self
   
 class Conv2d(Layer):
   """
+  2D Convolutional Neural Network Layer
+
+  Attributes
+  ----------
+  in_channels (int): number of input channels
+  out_channels (int): number of output channels
+  kernel_size (int): size of the kernel
+  stride (int): stride of the kernel
+  padding (int): padding of the kernel
+  params (dict): dictionary of parameters.
+
+  Notes
+  -----
   FOLLOW THIS RULE -> O = (W - K + 2P) / S + 1
+  Where:
+  O = output height/length
+  W = input height/length
+  K = kernel size
+  P = padding
+  S = stride
   """
   def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0):
     super().__init__()
@@ -140,36 +186,106 @@ class Conv2d(Layer):
     self.params["Conv2dW"] = Tensor(w)
 
   def __call__(self, x):
+    """
+    Performs a 2D convolution on the input tensor and Conv2d parameters and returns the output tensor.
+
+    :param x: input tensor
+    :type x: Tensor
+
+    :return: output tensor
+    :rtype: Tensor
+    """
     output = x.conv2d(self.params["Conv2dW"], self.padding, self.stride)
     return output
 
 class ReShape():
+  """
+  Layer for reshaping the input tensor to the specified shape
+  """
   def __init__(self, shape: tuple) -> None:
      self.shape = shape
 
   def __call__(self, x):
+      """
+      Reshapes the input tensor to the specified shape
+
+      :param x: input tensor
+      :type x: Tensor
+      """
       return x.reshape(self.shape)
-  
-class Flatten():
-  def __call__(self, x):
-    return x.flatten()
 class ReLU():
+  """
+  Layer for applying the ReLU activation function
+  """
   def __call__(self, x):
+    """
+    Applies the ReLU activation function to the input tensor
+
+    :param x: input tensor
+    :type x: Tensor
+    """
     return x.relu()
   
 class LogSoftmax():
+  """
+  Layer for applying the LogSoftmax activation function
+  """
   def __call__(self, x):
+    """
+    Applies the LogSoftmax activation function to the input tensor
+
+    :param x: input tensor
+    :type x: Tensor
+    """
     return x.logsoftmax()
   
 class Sequential:
+  """
+  Sequential Neural Network Model. This class is used to combine multiple layers into a single model.
+
+  Attributes
+  ----------
+  layers (list): list of layers to combine
+
+  Example
+  -------
+  >>> model = nn.Sequential(
+  ...     nn.Conv2d(1, 4, 3, 1, 0),
+  ...     nn.ReLU(),
+  ...     nn.Conv2d(4, 8, 3, 1, 0),
+  ...     nn.ReLU(),
+  ...     nn.ReShape((-1, 8*24*24)),
+  ...     nn.Linear(4608, 1024),
+  ...     nn.ReLU(),
+  ...     nn.Linear(1024, 10),
+  ... )
+  >>> input = Tensor(np.random.randn(32, 28, 28))
+  >>> output = model.forward(input)
+  """
   def __init__(self, *layers):
     self.layers = layers
 
   def forward(self, x):
+    """
+    Performs a forward pass on the input tensor through all the layers and returns the output tensor.
+
+    :param x: input tensor
+    :type x: Tensor
+
+    :return: output tensor
+    :rtype: Tensor
+    """
     for l in self.layers:
       x = l(x)
     return x  
   def save(self, path):
+    # WIP
+    """
+    Saves the model parameters to the specified path.
+
+    :param path: path to save the model parameters to
+    :type path: str
+    """
     model_dict = {}
     for i, l in enumerate(self.layers):
       model_dict[f"layer_{i}"] = l.params
@@ -177,11 +293,29 @@ class Sequential:
   def __str__(self) -> str:
     return f"Sequential({', '.join([str(type(l)) for l in self.layers])})"
   def step(self, lr, optimizer):
+    """
+    Calls the step function of the optimizer on the parameters of all the layers.
+
+    :param lr: learning rate
+    :type lr: float
+
+    :param optimizer: optimizer to use
+    :type optimizer: Optimizer
+    """
     for layer in self.layers:
       if isinstance(layer, Layer):
         layer.step(lr, optimizer=optimizer)
 
   def to(self, device):
+    """
+    Moves the parameters of the model to the specified device.
+
+    :param device: device to move the parameters to
+    :type device: str (either "cpu" or "cuda")
+
+    :return: self
+    :rtype: Sequential
+    """
     for layer in self.layers:
       if isinstance(layer, Layer):
         layer.to(device)

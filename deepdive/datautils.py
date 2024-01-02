@@ -1,4 +1,4 @@
-from deepdive.tensor import Tensor
+from .tensor import Tensor
 from datasets import DatasetDict, Dataset
 import random
 import numpy as np
@@ -9,6 +9,26 @@ import numpy as np
 # - Shuffle = Bool
 
 class DataLoader:
+    """
+    DataLoader for HuggingFace Datasets
+
+    Attributes
+    ----------
+    dataset (DatasetDict): HuggingFace Dataset
+    bs (int): Batch Size
+    shuffle (bool): Whether to shuffle the dataset
+    batches (list): List of batches
+    batch_index (int): Current batch index
+
+    Example:
+    -------
+    >>> from deepdive.datautils import DataLoader
+    >>> from datasets import load_dataset
+    >>> mnist = load_dataset('mnist')
+    >>> dataloader = DataLoader(mnist['train'], batch_size=32)
+    >>> for i, (input, targets) in enumerate(dataloader):
+    ...     print(input.shape, targets.shape) # (32, 28, 28) (32,)
+    """
     def __init__(self, dataset: DatasetDict, batch_size: int = 1, shuffle: bool = False) -> None:
         self.dataset = dataset
         self.bs = batch_size
@@ -18,6 +38,9 @@ class DataLoader:
         self.batch_index = 0
 
     def get_batches(self):
+        """
+        Returns a list of batches from self.dataset
+        """
         num_batches, last_bs = divmod(len(self.dataset), self.bs)
         batches = [self.dataset.select(range(i*self.bs, (i+1)*self.bs)) for i in range(num_batches)]
         if last_bs != 0:
@@ -26,6 +49,9 @@ class DataLoader:
 
     def shuffle(self):
         # Fisher-Yattes Shuffle Algorithm
+        """
+        Uses Fisher-Yattes Shuffle Algorithm to shuffle the dataset
+        """
         arr = self.dataset.to_list()
         for i in range(len(arr) - 1, 0, -1):
             j = random.randint(0, i)
@@ -36,9 +62,23 @@ class DataLoader:
         return self
     
     def __len__(self):
+        """
+        Returns the number of batches
+
+        Example
+        -------
+        >>> from deepdive.datautils import DataLoader
+        >>> from datasets import load_dataset
+        >>> mnist = load_dataset('mnist')
+        >>> dataloader = DataLoader(mnist['train'], batch_size=32)
+        >>> len(dataloader) # 1875
+        """
         return len(self.batches)
 
     def __next__(self):
+        """
+        Returns the next batch in self.batches
+        """
         if self.batch_index >= len(self.batches):
             raise StopIteration
         batch = self.batches[self.batch_index]

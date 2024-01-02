@@ -2,12 +2,8 @@ from .utils import import_cupy_else_numpy
 import numpy as np
 from functools import partialmethod
 from itertools import product
-import logging
-import os
 
-# Logging stuff for later
-# log_level = os.environ.get('LOG')
-# logging.basicConfig(level=log_level)
+
 class Tensor:
   """
   A class used to represent a Tensor.
@@ -233,7 +229,7 @@ class Mul(Operator):
     :param ctx: The context of the operation.
     :type ctx: Operator
 
-    :param grad_output: The gradient of the output of the multiplication operation.
+    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
     :type grad_output: Tensor
 
     :return: The gradients of the multiplication operation.
@@ -283,7 +279,7 @@ class Add(Operator):
     :param ctx: The context of the operation.
     :type ctx: Operator
 
-    :param grad_output: The gradient of the output of the addition operation.
+    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
     :type grad_output: Tensor
 
     :return: The gradients of the addition operation.
@@ -329,7 +325,7 @@ class ReLU(Operator):
     :param ctx: The context of the operation.
     :type ctx: Operator
 
-    :param grad_output: The gradient of the output of the ReLU operation.
+    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
     :type grad_output: Tensor
 
     :return: The gradients of the ReLU operation.
@@ -382,7 +378,7 @@ class Dot(Operator):
     :param ctx: The context of the operation.
     :type ctx: Operator
 
-    :param grad_output: The gradient of the output of the dot product operation.
+    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
     :type grad_output: Tensor
 
     :return: The gradients of the dot product operation.
@@ -430,7 +426,7 @@ class Sum(Operator):
     :param ctx: The context of the operation.
     :type ctx: Operator
 
-    :param grad_output: The gradient of the output of the sum operation.
+    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
     :type grad_output: Tensor
 
     :return: The gradients of the sum operation.
@@ -481,7 +477,7 @@ class LogSoftmax(Operator):
     :param ctx: The context of the operation.
     :type ctx: Operator
 
-    :param grad_output: The gradient of the output of the log softmax operation.
+    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
     :type grad_output: Tensor
 
     :return: The gradients of the log softmax operation.
@@ -504,22 +500,52 @@ class MSE(Operator):
   @staticmethod
   def backward(ctx, grad_output):
     input, target = ctx.saved_tensors
-    return 2*(input - target), -2*(input - target)
+    grad_input = grad_output * 2*(input - target)
+    grad_target = grad_output * -2*(input - target)
+    return grad_input, grad_target
 register('mse', MSE)
 
 class Conv2d(Operator):
   # https://www.cs.cmu.edu/~aarti/Class/10315_Spring22/315S22_Rec6.pdf
   """
-  The Conv2d class implements the 2D convolution operation for tensors and saves the context of the operation.
+  Implements the 2D convolution operation for tensors.
 
-  :note: The 2D convolution operation is defined as :math:`f(x) = x * w`.
+  This class is a subclass of Operator and defines the forward and backward methods for the 2D convolution operation.
+
+  :note: The 2D convolution operation is defined as :math:`f(x) = \sum_{m} \sum_{n} x[m, n] * w[m, n]`.
 
   Example
   -------
-  
+  >>> input = Tensor(np.random.rand(1, 3, 32, 32))
+  >>> weight = Tensor(np.random.rand(16, 3, 5, 5))
+  >>> padding = 2
+  >>> stride = 1
+  >>> out = input.conv2d(weight, padding, stride)
+  >>> print(out.shape)  # Example output: (1, 16, 32, 32)
   """
   @staticmethod
   def forward(ctx, input, weight, padding, stride):
+    """
+    Computes the forward pass of the 2D convolution operation and saves the context of the operation.
+
+    :param ctx: The context of the operation.
+    :type ctx: Operator
+
+    :param input: The input tensor.
+    :type input: Tensor
+
+    :param weight: The weight tensor.
+    :type weight: Tensor
+
+    :param padding: The padding of the operation.
+    :type padding: int
+
+    :param stride: The stride of the operation.
+    :type stride: int
+
+    :return: The result of the 2D convolution operation.
+    :rtype: Tensor
+    """
     ctx.save_for_backward(input, weight, padding, stride)
 
     N, C, W, H = input.shape
@@ -533,13 +559,28 @@ class Conv2d(Operator):
 
     input_pad = np.pad(input, ((0, 0), (0, 0), (padding, padding), (padding, padding)), 'constant')
     output = np.zeros((N, F, out_h, out_w))
-    for n, f, i, j in product(range(N), range(F), range(out_h), range(out_w)):
-      output[n, f, i, j] = np.sum(input_pad[n, :, i * stride:i * stride + HH, j * stride:j * stride + WW] * weight[f, :, :, :])
+    for n in range(N):
+      for f in range(F):
+        for i in range(out_h):
+          for j in range(out_w):
+            output[n, f, i, j] = np.sum(input_pad[n, :, i * stride:i * stride + HH, j * stride:j * stride + WW] * weight[f, :, :, :])
             
     return output
 
   @staticmethod
   def backward(ctx, grad_output):
+    """
+    Computes the backward pass of the 2D convolution operation.
+
+    :param ctx: The context of the operation.
+    :type ctx: Operator
+
+    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+    :type grad_output: Tensor
+
+    :return: The gradients of the 2D convolution operation.
+    :rtype: tuple of Tensor
+    """
     input, weight, padding, stride = ctx.saved_tensors
     
     N, C, H, W = input.shape
@@ -551,34 +592,113 @@ class Conv2d(Operator):
 
     input_pad = np.pad(input, ((0,0), (0,0), (padding, padding), (padding, padding)), 'constant')
     
-    for n, f, i, j in product(range(N), range(F), range(out_h), range(out_w)):      
-      input_patch = input_pad[n, :, i*stride:i*stride+HH, j*stride:j*stride+WW]
-      grad_weight[f] += input_patch * grad_output[n,f,i,j]
-      # grad_input[n,:, i*stride:i*stride+HH, j*stride:j*stride+WW] += weight[f] * grad_output[n,f,i,j]
+    for n in range(N):
+      for f in range(F):
+        for i in range(out_h):
+          for j in range(out_w):
+            input_patch = input_pad[n, :, i*stride:i*stride+HH, j*stride:j*stride+WW]
+            grad_weight[f] += input_patch * grad_output[n,f,i,j]
     
     return grad_input, grad_weight
 register('conv2d', Conv2d)
 
 class Reshape(Operator):
+  """
+  Implements the reshape operation for tensors.
+
+  This class is a subclass of Operator and defines the forward and backward methods for reshaping a tensor.
+
+  Example
+  -------
+  >>> x = Tensor(np.array([[1, 2, 3], [4, 5, 6]]))
+  >>> y = x.reshape((3, 2))
+  >>> print(y)  # Example output: Tensor([[1, 2], [3, 4], [5, 6]])
+  """
   @staticmethod
   def forward(ctx, x, shape: tuple):
+    """
+    Computes the forward pass of the reshape operation and saves the context of the operation.
+
+    :param ctx: The context of the operation.
+    :type ctx: Operator
+
+    :param x: The input tensor.
+    :type x: Tensor
+
+    :param shape: Reshape the tensor x to this shape.
+    :type shape: tuple
+
+    :return: The result of the reshape operation.
+    :rtype: Tensor
+    """
     ctx.operands = (ctx.operands[0],)
     ctx.save_for_backward(x.shape)
     return x.reshape(shape)
   @staticmethod
   def backward(ctx, grad_output):
+    """
+    Computes the backward pass of the reshape operation.
+
+    :param ctx: The context of the operation.
+    :type ctx: Operator
+
+    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+    :type grad_output: Tensor
+
+    :return: The gradients of the reshape operation.
+    :rtype: tuple of Tensor
+    """
     original_shape, = ctx.saved_tensors
     return grad_output.reshape(original_shape)
 register('reshape', Reshape)
 
 class MAE(Operator):
+  """
+  Implements the Mean Absolute Error (MAE) operation for tensors.
+
+  This class is a subclass of Operator and defines the forward and backward methods for computing the MAE between two tensors.
+
+  Example
+  -------
+  >>> predictions = Tensor(np.array([3.0, -0.5, 2, 7]))
+  >>> targets = Tensor(np.array([2.5, 0.0, 2, 8]))
+  >>> error = predictions.mae(targets)
+  >>> print(error)  # Example output: Tensor([0.5, 0.5, 0, 1])
+  """
   @staticmethod
   def forward(ctx, input, target):
+    """
+    Computes the forward pass of the MAE operation and saves the context of the operation.
+
+    :param ctx: The context of the operation.
+    :type ctx: Operator
+
+    :param input: The first operand of the MAE operation.
+    :type input: Tensor
+
+    :param target: The second operand of the MAE operation.
+    :type target: Tensor
+
+    :return: The result of the MAE operation.
+    :rtype: Tensor
+    """
     ctx.save_for_backward(input, target)
     return np.abs(input - target)
 
   @staticmethod
   def backward(ctx, grad_output):
+    """
+    Computes the backward pass of the MAE operation.
+
+    :param ctx: The context of the operation.
+    :type ctx: Operator
+
+    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+    :type grad_output: Tensor
+
+    :return: The gradients of the MAE operation.
+    :rtype: tuple of Tensor
+    """
     input, target = ctx.saved_tensors
     grad_input = grad_output * np.sign(input - target)
     grad_target = grad_output * -np.sign(input - target)
