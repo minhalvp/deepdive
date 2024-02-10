@@ -17,12 +17,13 @@ class Optimizer(ABC):
     Attributes
     ----------
     params (list): list of parameters from the model
-    lr (float): learning rate    
+    lr (float): learning rate
+    weight_decay (float): weight decay (L2 penalty)
     """
-    def __init__(self, params, lr=1e-3):
-        self.params = list(params)
+    def __init__(self, params: dict = None, lr: int = 1e-3, weight_decay: float = 0.0):
+        self.params = params
         self.lr = lr
-
+        self.weight_decay = weight_decay
     @abstractmethod
     def step(self):
         """
@@ -39,13 +40,16 @@ class SGD(Optimizer):
     ----------
     params (list): list of parameters to optimize
     lr (float): learning rate
+    weight_decay (float): weight decay (L2 penalty)
     """
     def step(self):
         """
         Performs a single optimization step by updating the parameters in the direction of the gradient with the learning rate.
         """
         for p in self.params:
-            p.data -= self.lr * p.grad
+          if self.weight_decay != 0:
+            p.grad += self.weight_decay * p.data
+          p.data -= self.lr * p.grad
 
 
 class Adam(Optimizer):
@@ -58,13 +62,14 @@ class Adam(Optimizer):
     lr (float): learning rate
     betas (tuple): coefficients used for computing running averages of gradient and its square
     eps (float): term added to the denominator to improve numerical stability
+    weight_decay (float): weight decay (L2 penalty)
     """
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8):
-        super().__init__(params, lr)
+    def __init__(self, params: dict = None, lr: int = 1e-3, betas: tuple = (0.9, 0.999), eps: int = 1e-8, weight_decay: float = 0.0):
+        super().__init__(params, lr, weight_decay)
         self.betas = betas
         self.eps = eps
-        self.m = [np.zeros_like(p.data) for p in self.params]
-        self.v = [np.zeros_like(p.data) for p in self.params]
+        self.m = [np.zeros_like(p.data) for p in self.params.values()]
+        self.v = [np.zeros_like(p.data) for p in self.params.values()]
         self.t = 0
 
     def step(self):
@@ -73,11 +78,13 @@ class Adam(Optimizer):
         """
         self.t += 1
         for i, p in enumerate(self.params):
-            self.m[i] = self.betas[0] * self.m[i] + (1 - self.betas[0]) * p.grad
-            self.v[i] = self.betas[1] * self.v[i] + (1 - self.betas[1]) * p.grad**2
-            m_hat = self.m[i] / (1 - self.betas[0]**self.t)
-            v_hat = self.v[i] / (1 - self.betas[1]**self.t)
-            p.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
+          if self.weight_decay != 0:
+            p.grad += self.weight_decay * p.data
+          self.m[i] = self.betas[0] * self.m[i] + (1 - self.betas[0]) * p.grad
+          self.v[i] = self.betas[1] * self.v[i] + (1 - self.betas[1]) * p.grad**2
+          m_hat = self.m[i] / (1 - self.betas[0]**self.t)
+          v_hat = self.v[i] / (1 - self.betas[1]**self.t)
+          p.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
 
 
 class Layer:
@@ -95,12 +102,14 @@ class Layer:
   def __init__(self):
     self.params = {}
   
-  def step(self, lr, optimizer):
+  def step(self, lr: int, weight_decay: float, optimizer: Optimizer):
     """
     Calls the step function of the optimizer on the parameters of all the layers.
 
     :param lr: learning rate
     :type lr: float
+    :param weight_decay: weight decay (L2 penalty)
+    :type weight_decay: float
     :param optimizer: optimizer to use
     :type optimizer: Optimizer
     """
@@ -108,7 +117,7 @@ class Layer:
       if p.grad.shape != p.data.shape:
         # print(f"Warning: grad shape {p.grad.shape} != data shape {p.data.shape}, assuming batched data and averaging gradients")
         p.grad = p.grad.mean(axis=0)
-    optim = optimizer(self.params.values(), lr=lr)
+    optim = optimizer(self.params.values(), lr, weight_decay)
     optim.step()
 
 class Linear(Layer):
@@ -120,7 +129,7 @@ class Linear(Layer):
   in_features (int): number of input features
   out_features (int): number of output features
   """
-  def __init__(self, in_features, out_features):
+  def __init__(self, in_features: int, out_features: int):
     super().__init__()
 
     w = np.random.uniform(-1., 1., size=(in_features,out_features))/np.sqrt(in_features*out_features)
@@ -143,7 +152,7 @@ class Linear(Layer):
     x = x.add(self.params["LinearB"])
     return x
   
-  def to(self, device):
+  def to(self, device: str):
     """
     Moves the parameters of the layer to the specified device.
 
@@ -177,7 +186,7 @@ class Conv2d(Layer):
   P = padding
   S = stride
   """
-  def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0):
+  def __init__(self, in_channels: int, out_channels: int, kernel_size: int, stride: int = 1, padding: int = 0):
     super().__init__()
     self.kernel_size = kernel_size
     self.stride = stride
@@ -185,7 +194,7 @@ class Conv2d(Layer):
     w = np.random.uniform(-1., 1., size=(out_channels, in_channels, kernel_size, kernel_size))/np.sqrt(in_channels*out_channels*kernel_size*kernel_size)
     self.params["Conv2dW"] = Tensor(w)
 
-  def __call__(self, x):
+  def __call__(self, x: Tensor):
     """
     Performs a 2D convolution on the input tensor and Conv2d parameters and returns the output tensor.
 
@@ -217,7 +226,7 @@ class ReLU():
   """
   Layer for applying the ReLU activation function
   """
-  def __call__(self, x):
+  def __call__(self, x: Tensor):
     """
     Applies the ReLU activation function to the input tensor
 
@@ -230,7 +239,7 @@ class LogSoftmax():
   """
   Layer for applying the LogSoftmax activation function
   """
-  def __call__(self, x):
+  def __call__(self, x: Tensor):
     """
     Applies the LogSoftmax activation function to the input tensor
 
@@ -262,10 +271,10 @@ class Sequential:
   >>> input = Tensor(np.random.randn(32, 28, 28))
   >>> output = model.forward(input)
   """
-  def __init__(self, *layers):
+  def __init__(self, *layers: Layer):
     self.layers = layers
 
-  def forward(self, x):
+  def forward(self, x: Tensor):
     """
     Performs a forward pass on the input tensor through all the layers and returns the output tensor.
 
@@ -292,7 +301,7 @@ class Sequential:
     np.save(path, model_dict)
   def __str__(self) -> str:
     return f"Sequential({', '.join([str(type(l)) for l in self.layers])})"
-  def step(self, lr, optimizer):
+  def step(self, lr, weight_decay, optimizer: Optimizer):
     """
     Calls the step function of the optimizer on the parameters of all the layers.
 
@@ -304,9 +313,9 @@ class Sequential:
     """
     for layer in self.layers:
       if isinstance(layer, Layer):
-        layer.step(lr, optimizer=optimizer)
+        layer.step(lr, weight_decay, optimizer)
 
-  def to(self, device):
+  def to(self, device: str):
     """
     Moves the parameters of the model to the specified device.
 

@@ -33,7 +33,7 @@ class Tensor:
     return f"Tensor({self.data})"
 
   def __str__(self):
-    return f"Tensor {self.data} with grad {self.grad} on device {self.device}"
+    return f"Tensor {self.data}\nGradient: {self.grad}\nDevice: {self.device}"
   
   def to(self, device):
     """
@@ -83,16 +83,16 @@ class Tensor:
 
     assert(self.grad is not None)
 
-    grads = self._ctx.backward(self._ctx, self.grad) # tuple or np.ndarray
+    parent_grads = self._ctx.backward(self._ctx, self.grad) # tuple or np.ndarray
     if len(self._ctx.operands) == 1:
-      grads = np.expand_dims(grads, axis=0)
+      parent_grads = np.expand_dims(parent_grads, axis=0)
 
-    for t,g in zip(self._ctx.operands, grads):
-      # if g.shape != t.data.shape:
-        # print(f"grad shape must match tensor shape in {self._ctx}, {g.shape} != {t.data.shape}")
+    for tensor, gradient in zip(self._ctx.operands, parent_grads):
+      # if gradient.shape != tensor.data.shape:
+        # print(f"grad shape must match tensor shape in {self._ctx}, {gradient.shape} != {tensor.data.shape}")
         # assert(False)
-      t.grad = g
-      t.backward(False)
+      tensor.grad = gradient
+      tensor.backward(False)
 
   def mean(self):
     """

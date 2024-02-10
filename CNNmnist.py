@@ -27,7 +27,7 @@ def train(num_epochs=10):
         loss = output.mse(targets)
         loss = loss.mean()
         loss.backward()
-        model.step(lr=0.01, optimizer=nn.SGD)
+        model.step(lr = 0.001, weight_decay=0.0001, optimizer=nn.SGD)
         print(f"loss {loss.data}")
         if i == num_epochs:
             break
@@ -45,5 +45,5 @@ def test_accuracy(num_tests=100):
     accuracy = accuracy.mean()
     return accuracy
 
-train(20)
+train(100)
 print(test_accuracy())
