@@ -20,10 +20,10 @@ model = nn.Sequential(
 )
 
 def train(num_epochs=10):
-    for i, (input, targets) in enumerate(dataloader):
-        input = Tensor(np.expand_dims(input, axis=1))
+    for i, (inp, targets) in enumerate(dataloader):
+        inp = Tensor(np.expand_dims(inp, axis=1))
         targets = Tensor(np.eye(10)[targets])
-        output = model.forward(input)
+        output = model.forward(inp)
         loss = output.mse(targets)
         loss = loss.mean()
         loss.backward()
@@ -35,10 +35,10 @@ def train(num_epochs=10):
 def test_accuracy(num_tests=100):
     accuracy = []
     for i in range(num_tests):
-        input, targets = mnist["test"][i]['image'], mnist["test"][i]['label']
-        input = np.array(input)
-        input = Tensor(np.expand_dims(np.expand_dims(input, axis=0), axis=0))
-        output = model.forward(input)
+        inp, targets = mnist["test"][i]['image'], mnist["test"][i]['label']
+        inp = np.array(inp)
+        inp = Tensor(np.expand_dims(np.expand_dims(inp, axis=0), axis=0))
+        output = model.forward(inp)
         prediction = np.argmax(output.data)
         accuracy.append(prediction == targets)
     accuracy = np.array(accuracy)

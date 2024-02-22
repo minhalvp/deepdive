@@ -1,8 +1,9 @@
 from .utils import import_cupy_else_numpy
 import numpy as np
+from numpy import ndarray
 from functools import partialmethod
 from itertools import product
-
+from typing import Union, Optional, List, Tuple
 
 class Tensor:
   """
@@ -21,14 +22,14 @@ class Tensor:
   _ctx : Context, optional
       The context related to this tensor, used in backpropagation.
   """
-  def __init__(self, data, grad=None, device=None):
+  def __init__(self, data: Union[ndarray, List[Union[float, int]], int, float] , grad: Optional[ndarray] = None, device: Optional[str] = None):
     self.grad = grad
     self.device = device
     if device == "cuda":
       global np
       np = import_cupy_else_numpy()
     self.data = np.array(data)
-    self._ctx = None
+    self._ctx: Optional[Operator] = None
   def __repr__(self):
     return f"Tensor({self.data})"
 
@@ -56,7 +57,7 @@ class Tensor:
     """
     return Tensor(self.data, device=device)
 
-  def backward(self, allow_fill=True):
+  def backward(self, allow_fill: bool = True) -> None:
     """
     Performs backpropagation from this tensor through the computation graph.
 
@@ -94,7 +95,7 @@ class Tensor:
       tensor.grad = gradient
       tensor.backward(False)
 
-  def mean(self):
+  def mean(self) -> 'Tensor':
     """
     Computes and returns the mean of the tensor.
 
@@ -110,7 +111,6 @@ class Tensor:
     """
     div = Tensor(np.array([1/self.data.size]))
     return self.sum().mul(div)
-
 
 class Operator:
   """
@@ -128,11 +128,11 @@ class Operator:
     The tensors saved by the `save_for_backward` method.
 
   """
-  def __init__(self, *tensors) -> None:
+  def __init__(self, *tensors: Tensor) -> None:
     self.operands = tensors
-    self.saved_tensors = []
+    self.saved_tensors: List[Tensor] = []
   
-  def save_for_backward(self, *x):
+  def save_for_backward(self, *x: Tensor):
     """
     Saves the input tensors for later use in the backward pass. This is done by extending the `saved_tensors` list.
 
@@ -141,7 +141,7 @@ class Operator:
     """
     self.saved_tensors.extend(x)
 
-  def apply(self, arg, *x):
+  def apply(self, arg: 'Operator', *x: tuple) -> Tensor:
     """
     Apply the operator.
   
@@ -202,7 +202,7 @@ class Mul(Operator):
   >>> print(x.mul(y))  # prints: [4, 10, 18]
   """
   @staticmethod
-  def forward(ctx, x, y):
+  def forward(ctx, x, y) -> ndarray:
     """
     Computes the forward pass of the multiplication operation and saves the context of the operation.
 
@@ -222,7 +222,7 @@ class Mul(Operator):
     return x*y
 
   @staticmethod
-  def backward(ctx, grad_output):
+  def backward(ctx, grad_output) -> Tuple[ndarray, ndarray]:
     """
     Computes the backward pass of the multiplication operation.
 
@@ -252,7 +252,7 @@ class Add(Operator):
   >>> print(x.add(y))  # prints: [5, 7, 9]
   """
   @staticmethod
-  def forward(ctx, x, y):
+  def forward(ctx, x, y) -> ndarray:
     """
     Computes the forward pass of the addition operation and saves the context of the operation.
 
@@ -272,7 +272,7 @@ class Add(Operator):
     return x+y
 
   @staticmethod
-  def backward(ctx, grad_output):
+  def backward(ctx, grad_output) -> Tuple[ndarray, ndarray]:
     """
     Computes the backward pass of the addition operation.
 
@@ -301,7 +301,7 @@ class ReLU(Operator):
   >>> print(x.relu())  # prints: [0, 2, 0]
   """
   @staticmethod
-  def forward(ctx, input):
+  def forward(ctx: Operator, input: ndarray) -> ndarray:
     """
     Computes the forward pass of the ReLU operation and saves the context of the operation.
 
@@ -318,7 +318,7 @@ class ReLU(Operator):
     return np.maximum(input, 0)
 
   @staticmethod
-  def backward(ctx, grad_output):
+  def backward(ctx: Operator, grad_output: ndarray) -> ndarray:
     """
     Computes the backward pass of the ReLU operation.
 
@@ -351,7 +351,7 @@ class Dot(Operator):
   >>> print(x.dot(y))  # prints: 32
   """
   @staticmethod
-  def forward(ctx, input, weight):
+  def forward(ctx: Operator, input: ndarray, weight: ndarray) -> ndarray:
     """
     Computes the forward pass of the dot product operation and saves the context of the operation.
 
@@ -371,7 +371,7 @@ class Dot(Operator):
     return input.dot(weight)
 
   @staticmethod
-  def backward(ctx, grad_output):
+  def backward(ctx: Operator, grad_output: ndarray) -> Tuple[ndarray, ndarray]:
     """
     Computes the backward pass of the dot product operation.
 
@@ -402,7 +402,7 @@ class Sum(Operator):
   >>> print(x.sum())  # prints: 6
   """
   @staticmethod
-  def forward(ctx, input):
+  def forward(ctx: Operator, input: ndarray) -> ndarray:
     """
     Computes the forward pass of the sum operation and saves the context of the operation.
 
@@ -419,7 +419,7 @@ class Sum(Operator):
     return np.array([input.sum()])
 
   @staticmethod
-  def backward(ctx, grad_output):
+  def backward(ctx: Operator, grad_output: ndarray) -> ndarray:
     """
     Computes the backward pass of the sum operation.
 
@@ -449,7 +449,7 @@ class LogSoftmax(Operator):
   >>> print(x.logsoftmax())
   """
   @staticmethod
-  def forward(ctx, input):
+  def forward(ctx: Operator, input: ndarray) -> ndarray:
     """
     Computes the forward pass of the log softmax operation.
 
@@ -470,7 +470,7 @@ class LogSoftmax(Operator):
     return output
 
   @staticmethod
-  def backward(ctx, grad_output):
+  def backward(ctx: Operator, grad_output: ndarray) -> Tuple[ndarray, ndarray]:
     """
     Computes the backward pass of the log softmax operation.
 
@@ -493,12 +493,12 @@ class MSE(Operator):
   Work In Progress
   """
   @staticmethod
-  def forward(ctx, input, target):
+  def forward(ctx: Operator, input: ndarray, target: ndarray) -> ndarray:
     ctx.save_for_backward(input, target)
     return np.array((input - target)**2)
 
   @staticmethod
-  def backward(ctx, grad_output):
+  def backward(ctx: Operator, grad_output: ndarray) -> Tuple[ndarray, ndarray]:
     input, target = ctx.saved_tensors
     grad_input = grad_output * 2*(input - target)
     grad_target = grad_output * -2*(input - target)
@@ -524,7 +524,7 @@ class Conv2d(Operator):
   >>> print(out.shape)  # Example output: (1, 16, 32, 32)
   """
   @staticmethod
-  def forward(ctx, input, weight, padding, stride):
+  def forward(ctx: Operator, input: ndarray, weight: ndarray, padding: int, stride: int) -> ndarray:
     """
     Computes the forward pass of the 2D convolution operation and saves the context of the operation.
 
@@ -568,7 +568,7 @@ class Conv2d(Operator):
     return output
 
   @staticmethod
-  def backward(ctx, grad_output):
+  def backward(ctx: Operator, grad_output: ndarray) -> Tuple[ndarray, ndarray]:
     """
     Computes the backward pass of the 2D convolution operation.
 
@@ -615,7 +615,7 @@ class Reshape(Operator):
   >>> print(y)  # Example output: Tensor([[1, 2], [3, 4], [5, 6]])
   """
   @staticmethod
-  def forward(ctx, x, shape: tuple):
+  def forward(ctx: Operator, x: ndarray, shape: tuple) -> ndarray:
     """
     Computes the forward pass of the reshape operation and saves the context of the operation.
 
@@ -623,19 +623,19 @@ class Reshape(Operator):
     :type ctx: Operator
 
     :param x: The input tensor.
-    :type x: Tensor
+    :type x: ndarray
 
     :param shape: Reshape the tensor x to this shape.
     :type shape: tuple
 
     :return: The result of the reshape operation.
-    :rtype: Tensor
+    :rtype: ndarray
     """
     ctx.operands = (ctx.operands[0],)
     ctx.save_for_backward(x.shape)
     return x.reshape(shape)
   @staticmethod
-  def backward(ctx, grad_output):
+  def backward(ctx: Operator, grad_output: ndarray) -> ndarray:
     """
     Computes the backward pass of the reshape operation.
 
@@ -643,10 +643,10 @@ class Reshape(Operator):
     :type ctx: Operator
 
     :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
-    :type grad_output: Tensor
+    :type grad_output: ndarray
 
     :return: The gradients of the reshape operation.
-    :rtype: tuple of Tensor
+    :rtype: tuple of ndarray
     """
     original_shape, = ctx.saved_tensors
     return grad_output.reshape(original_shape)
@@ -666,7 +666,7 @@ class MAE(Operator):
   >>> print(error)  # Example output: Tensor([0.5, 0.5, 0, 1])
   """
   @staticmethod
-  def forward(ctx, input, target):
+  def forward(ctx: Operator, input: ndarray, target: ndarray) -> ndarray:
     """
     Computes the forward pass of the MAE operation and saves the context of the operation.
 
@@ -674,19 +674,19 @@ class MAE(Operator):
     :type ctx: Operator
 
     :param input: The first operand of the MAE operation.
-    :type input: Tensor
+    :type input: ndarray
 
     :param target: The second operand of the MAE operation.
-    :type target: Tensor
+    :type target: ndarray
 
     :return: The result of the MAE operation.
-    :rtype: Tensor
+    :rtype: ndarray
     """
     ctx.save_for_backward(input, target)
     return np.abs(input - target)
 
   @staticmethod
-  def backward(ctx, grad_output):
+  def backward(ctx: Operator, grad_output: ndarray) -> Tuple[ndarray, ndarray]:
     """
     Computes the backward pass of the MAE operation.
 
@@ -694,10 +694,10 @@ class MAE(Operator):
     :type ctx: Operator
 
     :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
-    :type grad_output: Tensor
+    :type grad_output: ndarray
 
     :return: The gradients of the MAE operation.
-    :rtype: tuple of Tensor
+    :rtype: tuple of ndarray
     """
     input, target = ctx.saved_tensors
     grad_input = grad_output * np.sign(input - target)

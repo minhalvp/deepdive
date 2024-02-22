@@ -60,3 +60,42 @@ def test_sum():
 
     np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
     np.testing.assert_allclose(X.grad, x.grad, atol=1e-6)
+
+def test_relu():
+    x_init = np.random.randn(3, 4).astype(np.float32)
+    X, x = Tensor(x_init), torch.tensor(x_init, requires_grad=True)
+
+    Z = X.relu()
+    Z.mean().backward()
+    z = torch.nn.functional.relu(x)
+    z.mean().backward()
+
+    np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
+    np.testing.assert_allclose(X.grad, x.grad, atol=1e-6)
+
+def test_dot():
+    x_init = np.random.randn(3, 4).astype(np.float32)
+    y_init = np.random.randn(4, 5).astype(np.float32)
+    X, x = Tensor(x_init), torch.tensor(x_init, requires_grad=True)
+    Y, y = Tensor(y_init), torch.tensor(y_init, requires_grad=True)
+
+    Z = X.dot(Y)
+    Z.mean().backward()
+    z = x.matmul(y)
+    z.mean().backward()
+
+    np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
+    np.testing.assert_allclose(X.grad, x.grad, atol=1e-6)
+    np.testing.assert_allclose(Y.grad, y.grad, atol=1e-6)
+
+def test_logsoftmax():
+    x_init = np.random.randn(3, 4).astype(np.float32)
+    X, x = Tensor(x_init), torch.tensor(x_init, requires_grad=True)
+
+    Z = X.logsoftmax()
+    Z.mean().backward()
+    z = torch.nn.functional.log_softmax(x, dim=-1)
+    z.mean().backward()
+
+    np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
+    np.testing.assert_allclose(X.grad, x.grad, atol=1e-6)
