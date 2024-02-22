@@ -1,9 +1,13 @@
 from .utils import import_cupy_else_numpy
 import numpy as np
-from numpy import ndarray
+import cupy
 from functools import partialmethod
 from itertools import product
 from typing import Union, Optional, List, Tuple
+import graphviz
+
+
+ndarray = Union[np.ndarray, cupy.ndarray]
 
 class Tensor:
   """
@@ -29,14 +33,23 @@ class Tensor:
       global np
       np = import_cupy_else_numpy()
     self.data = np.array(data)
-    self._ctx: Optional[Operator] = None
+    self._ctx: Operator = None
   def __repr__(self):
     return f"Tensor({self.data})"
 
   def __str__(self):
-    return f"Tensor {self.data}\nGradient: {self.grad}\nDevice: {self.device}"
+    return f"Tensor shape: {self.data.shape}\nGradient: {self.grad}\nDevice: {self.device}"
+
+  def __add__(self, other: 'Tensor'):
+    return Add().apply(Add(), self, other)
   
-  def to(self, device):
+  def __mul__(self, other: 'Tensor'):
+    return Mul().apply(Mul(), self, other)
+  
+  def __sub__(self, other: 'Tensor'):
+    return Add().apply(Add(), self, -other)
+  
+  def to(self, device: str):
     """
     Moves the tensor to the specified device.
 
@@ -96,21 +109,71 @@ class Tensor:
       tensor.backward(False)
 
   def mean(self) -> 'Tensor':
-    """
-    Computes and returns the mean of the tensor.
+      """
+      Computes and returns the mean of the tensor.
 
-    The mean is computed by summing all elements in the tensor and dividing by the number of elements.
+      The mean is computed by summing all elements in the tensor and dividing by the number of elements.
 
-    :return: A new tensor containing the mean of the data of this tensor.
-    :rtype: Tensor
+      :return: A new tensor containing the mean of the data of this tensor.
+      :rtype: Tensor
 
-    Example
-    -------
-    >>> x = Tensor([1, 2, 3, 4])
-    >>> print(x.mean())  # prints: 2.5
-    """
-    div = Tensor(np.array([1/self.data.size]))
-    return self.sum().mul(div)
+      Example
+      -------
+      >>> x = Tensor([1, 2, 3, 4])
+      >>> print(x.mean())  # prints: 2.5
+      """
+      div = Tensor(np.array([1/self.data.size]))
+      return self.sum().mul(div)
+  
+  def draw_graph(self, namespace: Optional[dict] = None) -> None:
+        """
+        Draws the computation graph of the tensor and its operands.
+
+        This method uses the graphviz library to draw the computation graph of the tensor and its operands. The graph is saved as a PNG file. The namespace parameter is used to find the variable name of the tensor in the scope where draw_graph is called.
+
+        Parameters
+        ----------
+        namespace : dict, optional
+            A dictionary of the local variables in the scope where draw_graph is called.
+
+        Example
+        -------
+        >>> x = Tensor([1, 2, 3])
+        >>> y = Tensor([4, 5, 6])
+        >>> z = x + y
+        >>> z.draw_graph(locals())
+        """
+        # DFS to build the graph
+        def get_label(tensor: Tensor):
+              return f'shape: {tensor.data.shape} grad: {True if tensor.grad is not None else False}'
+        
+        def build_graph(tensor, dot: graphviz.Digraph):
+            if tensor in dot:
+                return
+            # Find the variable name in the calling scope
+            name = None
+            if namespace is not None:
+                for var_name, var_value in namespace.items():
+                    if var_value is tensor:
+                        name = var_name
+                        break
+
+            # Use the variable name as the label if it's found, otherwise use the tensor's id
+            label = name if name is not None else str(id(tensor))
+
+            dot.node(str(id(tensor)), f'{label}: {get_label(tensor)}', shape='box')
+            if tensor._ctx is not None:
+                dot.node(str(id(tensor._ctx)), type(tensor._ctx).__name__)
+                dot.edge(str(id(tensor._ctx)), str(id(tensor)))
+                for operand in tensor._ctx.operands:
+                    dot.edge(str(id(operand)), str(id(tensor._ctx)))
+                    build_graph(operand, dot)
+            else:
+                return
+
+        dot = graphviz.Digraph()
+        build_graph(self, dot)
+        dot.render("graph", format="png", cleanup=True)
 
 class Operator:
   """

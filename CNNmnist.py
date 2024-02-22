@@ -19,7 +19,7 @@ model = nn.Sequential(
     nn.Linear(1024, 10),
 )
 
-def train(num_epochs=10):
+def train(num_epochs = 10):
     for i, (inp, targets) in enumerate(dataloader):
         inp = Tensor(np.expand_dims(inp, axis=1))
         targets = Tensor(np.eye(10)[targets])
@@ -32,7 +32,7 @@ def train(num_epochs=10):
         if i == num_epochs:
             break
 
-def test_accuracy(num_tests=100):
+def test_accuracy(num_tests = 100):
     accuracy = []
     for i in range(num_tests):
         inp, targets = mnist["test"][i]['image'], mnist["test"][i]['label']
@@ -45,5 +45,5 @@ def test_accuracy(num_tests=100):
     accuracy = accuracy.mean()
     return accuracy
 
-train(100)
+train(10)
 print(test_accuracy())
