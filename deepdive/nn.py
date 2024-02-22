@@ -206,6 +206,17 @@ class Conv2d(Layer):
     """
     output = x.conv2d(self.params["Conv2dW"], self.padding, self.stride)
     return output
+  
+  def to(self, device: str):
+    """
+    Moves the parameters of the layer to the specified device.
+
+    :param device: device to move the parameters to
+    :type device: str (either "cpu" or "cuda")
+    """
+    for name, p in self.params.items():
+      self.params[name] = p.to(device)
+    return self
 
 class ReShape():
   """

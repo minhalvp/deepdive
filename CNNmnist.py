@@ -27,6 +27,8 @@ def train(num_epochs = 10):
         loss = output.mse(targets)
         loss = loss.mean()
         loss.backward()
+        if i == 0:
+            loss.draw_graph(locals())
         model.step(lr = 0.001, weight_decay=0.0001, optimizer=nn.SGD)
         print(f"loss {loss.data}")
         if i == num_epochs:

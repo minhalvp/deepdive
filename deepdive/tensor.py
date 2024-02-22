@@ -41,13 +41,13 @@ class Tensor:
     return f"Tensor shape: {self.data.shape}\nGradient: {self.grad}\nDevice: {self.device}"
 
   def __add__(self, other: 'Tensor'):
-    return Add().apply(Add(), self, other)
+    return self.add(other)
   
   def __mul__(self, other: 'Tensor'):
-    return Mul().apply(Mul(), self, other)
+    return self.mul(other)
   
   def __sub__(self, other: 'Tensor'):
-    return Add().apply(Add(), self, -other)
+    return self.add(other.mul(-1))
   
   def to(self, device: str):
     """
@@ -166,8 +166,9 @@ class Tensor:
                 dot.node(str(id(tensor._ctx)), type(tensor._ctx).__name__)
                 dot.edge(str(id(tensor._ctx)), str(id(tensor)))
                 for operand in tensor._ctx.operands:
-                    dot.edge(str(id(operand)), str(id(tensor._ctx)))
-                    build_graph(operand, dot)
+                    if isinstance(operand, Tensor):
+                      dot.edge(str(id(operand)), str(id(tensor._ctx)))
+                      build_graph(operand, dot)
             else:
                 return
 
