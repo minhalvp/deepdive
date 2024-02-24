@@ -450,7 +450,7 @@ class Dot(Operator):
     """
     input, weight = ctx.saved_tensors
     grad_input = grad_output.dot(weight.T)
-    grad_weight = grad_output.T.dot(input).T
+    grad_weight = input.T.dot(grad_output)
     return grad_input, grad_weight
 register('dot', Dot)
 

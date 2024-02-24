@@ -2,13 +2,13 @@ from deepdive.tensor import Tensor
 import deepdive.nn as nn
 from deepdive.datautils import DataLoader
 import numpy as np
-from datasets import load_dataset
+from datasets import load_dataset, Dataset
 from tqdm import trange
 
-mnist = load_dataset('mnist')
+mnist: Dataset = load_dataset('mnist')
 dataloader = DataLoader(mnist["train"], batch_size=32)
 
-model = nn.Sequential(
+model: nn.Sequential = nn.Sequential(
     nn.Conv2d(1, 4, 3, 1, 0),
     nn.ReLU(),
     nn.Conv2d(4, 8, 3, 1, 0),
@@ -19,7 +19,8 @@ model = nn.Sequential(
     nn.Linear(1024, 10),
 )
 
-def train(num_epochs = 10):
+
+def train(num_epochs: int = 10):
     for i, (inp, targets) in enumerate(dataloader):
         inp = Tensor(np.expand_dims(inp, axis=1))
         targets = Tensor(np.eye(10)[targets])

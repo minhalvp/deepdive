@@ -2,13 +2,8 @@ from .tensor import Tensor
 from .utils import import_cupy_else_numpy
 from abc import ABC, abstractmethod
 import numpy as np
+from typing import List, Tuple, Optional, Union, Dict, TypedDict
 
-# TODO - implement the following:
-# 1. Linear Layers
-# 2. something like nn.sequential
-# 3. Convolutional Layers 
-# 4. normalization layers
-# 5. Model saving and loading
 
 class Optimizer(ABC):
     """
@@ -20,7 +15,7 @@ class Optimizer(ABC):
     lr (float): learning rate
     weight_decay (float): weight decay (L2 penalty)
     """
-    def __init__(self, params: dict = None, lr: int = 1e-3, weight_decay: float = 0.0):
+    def __init__(self, params: Optional[dict] = None, lr: float = 1e-3, weight_decay: Optional[float] = 0.0):
         self.params = params
         self.lr = lr
         self.weight_decay = weight_decay
@@ -64,7 +59,7 @@ class Adam(Optimizer):
     eps (float): term added to the denominator to improve numerical stability
     weight_decay (float): weight decay (L2 penalty)
     """
-    def __init__(self, params: dict = None, lr: int = 1e-3, betas: tuple = (0.9, 0.999), eps: int = 1e-8, weight_decay: float = 0.0):
+    def __init__(self, params: Optional[dict] = None, lr: float = 1e-3, betas: Tuple[float, float] = (0.9, 0.999), eps: float = 1e-8, weight_decay: Optional[float] = 0.0):
         super().__init__(params, lr, weight_decay)
         self.betas = betas
         self.eps = eps
@@ -100,18 +95,17 @@ class Layer:
   Not all layers have both W and B parameters. For example, Conv2d layers only have W parameters.
   """
   def __init__(self):
-    self.params = {}
+    self.params: Dict[str, Tensor] = {}
   
-  def step(self, lr: int, weight_decay: float, optimizer: Optimizer):
+  def step(self, optimizer: Optimizer, lr: float = 1e-3, weight_decay: Optional[float] = 0.0):
     """
     Calls the step function of the optimizer on the parameters of all the layers.
-
+    :param optimizer: optimizer to use
+    :type optimizer: Optimizer
     :param lr: learning rate
     :type lr: float
     :param weight_decay: weight decay (L2 penalty)
     :type weight_decay: float
-    :param optimizer: optimizer to use
-    :type optimizer: Optimizer
     """
     for p in self.params.values():
       if p.grad.shape != p.data.shape:
@@ -134,10 +128,9 @@ class Linear(Layer):
 
     w = np.random.uniform(-1., 1., size=(in_features,out_features))/np.sqrt(in_features*out_features)
     b = np.zeros((out_features,))
-    self.params["LinearW"] = Tensor(w)
-    self.params["LinearB"] = Tensor(b)
+    self.params = {"LinearW": Tensor(w), "LinearB": Tensor(b)}
 
-  def __call__(self, x):
+  def __call__(self, x: Tensor) -> Tensor:
     # Todo: combining the weights and biases into a single tensor so forward pass is 1 operation
     """
     Performs a linear transformation on the input tensor and Linear parameters and returns the output tensor.
@@ -147,7 +140,7 @@ class Linear(Layer):
 
     :return: output tensor
     :rtype: Tensor
-    """  
+    """
     x = x.dot(self.params["LinearW"])
     x = x.add(self.params["LinearB"])
     return x
@@ -194,7 +187,7 @@ class Conv2d(Layer):
     w = np.random.uniform(-1., 1., size=(out_channels, in_channels, kernel_size, kernel_size))/np.sqrt(in_channels*out_channels*kernel_size*kernel_size)
     self.params["Conv2dW"] = Tensor(w)
 
-  def __call__(self, x: Tensor):
+  def __call__(self, x: Tensor) -> Tensor:
     """
     Performs a 2D convolution on the input tensor and Conv2d parameters and returns the output tensor.
 
@@ -225,7 +218,7 @@ class ReShape():
   def __init__(self, shape: tuple) -> None:
      self.shape = shape
 
-  def __call__(self, x):
+  def __call__(self, x: Tensor) -> Tensor:
       """
       Reshapes the input tensor to the specified shape
 
@@ -237,7 +230,7 @@ class ReLU():
   """
   Layer for applying the ReLU activation function
   """
-  def __call__(self, x: Tensor):
+  def __call__(self, x: Tensor) -> Tensor:
     """
     Applies the ReLU activation function to the input tensor
 
@@ -250,7 +243,7 @@ class LogSoftmax():
   """
   Layer for applying the LogSoftmax activation function
   """
-  def __call__(self, x: Tensor):
+  def __call__(self, x: Tensor) -> Tensor:
     """
     Applies the LogSoftmax activation function to the input tensor
 
@@ -295,10 +288,10 @@ class Sequential:
     :return: output tensor
     :rtype: Tensor
     """
-    for l in self.layers:
-      x = l(x)
+    for layer in self.layers:
+      x = layer(x)
     return x  
-  def save(self, path):
+  def save(self, path: str):
     # WIP
     """
     Saves the model parameters to the specified path.
@@ -312,19 +305,17 @@ class Sequential:
     np.save(path, model_dict)
   def __str__(self) -> str:
     return f"Sequential({', '.join([str(type(l)) for l in self.layers])})"
-  def step(self, lr, weight_decay, optimizer: Optimizer):
+  def step(self, lr, optimizer: Optimizer, weight_decay: Optional[float] = 0.0):
     """
     Calls the step function of the optimizer on the parameters of all the layers.
-
-    :param lr: learning rate
-    :type lr: float
-
     :param optimizer: optimizer to use
     :type optimizer: Optimizer
+    :param lr: learning rate
+    :type lr: float
     """
     for layer in self.layers:
       if isinstance(layer, Layer):
-        layer.step(lr, weight_decay, optimizer)
+        layer.step(lr=lr, weight_decay=weight_decay, optimizer=optimizer)
 
   def to(self, device: str):
     """
