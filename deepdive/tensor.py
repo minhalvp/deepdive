@@ -72,12 +72,14 @@ class Tensor:
 
   def backward(self, allow_fill: bool = True) -> None:
     """
-    Performs backpropagation from this tensor through the computation graph.
+    Performs backpropagation from this tensor through the computation graph using a depth-first search (DFS).
 
-    If this tensor is the result of an operation, this method will compute the gradient of this tensor with respect to the inputs of that operation, and recursively call backward on those inputs.
+    If this tensor is the result of an operation, this method will compute the gradient of this tensor with respect to the inputs of that operation, and recursively call backward on those inputs. This recursive process is essentially a DFS through the computation graph.
 
-    :param allow_fill: If True and if this tensor's grad attribute is None, a new gradient tensor will be created with the same shape as this tensor's data, filled with ones. This is useful for starting backpropagation from a scalar loss tensor.
-    :type allow_fill: bool, optional
+    Parameters
+    ----------
+    allow_fill : bool, optional
+      If True, fills in the first gradient with one if the gradient is None. This is used to fill in the gradient of a scalar with respect to itself.
 
     Example
     --------
@@ -102,10 +104,15 @@ class Tensor:
       parent_grads = np.expand_dims(parent_grads, axis=0)
 
     for tensor, gradient in zip(self._ctx.operands, parent_grads):
-      # if gradient.shape != tensor.data.shape:
-        # print(f"grad shape must match tensor shape in {self._ctx}, {gradient.shape} != {tensor.data.shape}")
-        # assert(False)
-      tensor.grad = gradient
+      if tensor.data.shape != gradient.shape:
+        # take a mean of the gradients of a axis
+        gradient = gradient.mean(axis=0)
+
+      if tensor.grad is None:
+        tensor.grad = gradient
+      else:
+        tensor.grad += gradient
+
       tensor.backward(False)
 
   def mean(self) -> 'Tensor':
@@ -114,8 +121,10 @@ class Tensor:
 
       The mean is computed by summing all elements in the tensor and dividing by the number of elements.
 
-      :return: A new tensor containing the mean of the data of this tensor.
-      :rtype: Tensor
+      Returns
+      -------
+      Tensor
+        A new tensor containing the mean of this tensor.
 
       Example
       -------
@@ -133,8 +142,8 @@ class Tensor:
 
         Parameters
         ----------
-        namespace : dict, optional
-            A dictionary of the local variables in the scope where draw_graph is called.
+        namespace : dict, default=None
+            An optional dictionary of the local variables in the scope where draw_graph is called. If not provided, the function will use the local variables in the scope where it is called.
 
         Example
         -------
@@ -200,8 +209,10 @@ class Operator:
     """
     Saves the input tensors for later use in the backward pass. This is done by extending the `saved_tensors` list.
 
-    :param x: The tensors to save.
-    :type x: Tensor
+    Parameters
+    ----------
+    x : Tensor
+      The input tensors to be saved.
     """
     self.saved_tensors.extend(x)
 
@@ -218,14 +229,17 @@ class Operator:
     4. Saving the context to the new ``Tensor`` instance for later use in 
       backpropagation
 
-    :param arg: The object that will be used to generate the context.
-    :type arg: object
-
-    :param x: The input tensors.
-    :type x: Tensor
-
-    :return: A new tensor containing the result of the operation and with the context saved in the `_ctx` attribute.
-    :rtype: Tensor
+    Parameters
+    ----------
+    arg : Operator
+      The operator to be applied
+    x : tuple
+      The input tensors to the operator
+    
+    Returns
+    -------
+    Tensor
+      The result of the operation
     """
     ctx = arg(self, *x)
     ret = Tensor(arg.forward(ctx, self.data, *[t.data if isinstance(t, Tensor) else t for t in x]))
@@ -236,28 +250,28 @@ def register(name, fxn):
   """
   Adds a method to the Tensor class. The new method is a partial application of the `apply` method of the `fxn` object.
 
-  :param name: The name of the new method.
-  :type name: str
-  :param fxn: The object whose `apply` method will be partially applied.
-  :type fxn: object
+  Parameters
+  ----------
+  name : str
+    The name of the new method
+  fxn : Operator
+    The operator to be applied
 
   Example
   -------
   If `fxn` is an instance of a class `Mul` with an `apply` method that multiplies its arguments:
-  
-  .. code-block:: python
-
-    register('mul', Mul())
-    t = Tensor([2, 3, 4])
-    t.mul(5)  # This will output a tensor with data [10, 15, 20]
+  >>> register('mul', Mul)
+  >>> x = Tensor([1, 2, 3])
+  >>> y = Tensor([4, 5, 6])
+  >>> print(x.mul(y))  # prints: [4, 10, 18]
   """
   setattr(Tensor, name, partialmethod(fxn.apply, fxn))
 
 class Mul(Operator):
   """
-  The Mul class implements the multiplication operation for tensors.
+  The Mul class implements the hadamard product operation for tensors and saves the context of the operation.
 
-  :note: The multiplication operation is defined as :math:`f(x, y) = x * y`.
+  :note: The multiplication operation is equivalent to a hadamard product.
 
   Example
   -------
@@ -270,17 +284,19 @@ class Mul(Operator):
     """
     Computes the forward pass of the multiplication operation and saves the context of the operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param x: The first operand of the multiplication.
-    :type x: Tensor
-
-    :param y: The second operand of the multiplication.
-    :type y: Tensor
-
-    :return: The result of the multiplication.
-    :rtype: Tensor
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    x : Tensor
+      The first operand of the multiplication.
+    y : Tensor
+      The second operand of the multiplication.
+    
+    Returns
+    -------
+    ndarray
+      The result of the multiplication operation
     """
     ctx.save_for_backward(x, y)
     return x*y
@@ -290,14 +306,13 @@ class Mul(Operator):
     """
     Computes the backward pass of the multiplication operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
-    :type grad_output: Tensor
-
-    :return: The gradients of the multiplication operation.
-    :rtype: tuple of Tensor
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    grad_output : Tensor
+      The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+    
     """
     x,y = ctx.saved_tensors
     return y*grad_output, x*grad_output
@@ -320,17 +335,19 @@ class Add(Operator):
     """
     Computes the forward pass of the addition operation and saves the context of the operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    x : ndarray
+      The first operand of the addition.
+    y : ndarray
+      The second operand of the addition.
 
-    :param x: The first operand of the addition.
-    :type x: Tensor
-
-    :param y: The second operand of the addition.
-    :type y: Tensor
-
-    :return: The result of the addition.
-    :rtype: Tensor
+    Returns
+    -------
+    ndarray
+      The result of the addition operation
     """
     ctx.save_for_backward(x, y)
     return x+y
@@ -340,14 +357,12 @@ class Add(Operator):
     """
     Computes the backward pass of the addition operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
-    :type grad_output: Tensor
-
-    :return: The gradients of the addition operation.
-    :rtype: tuple of Tensor
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    grad_output : ndarray
+      The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
     """
     x,y = ctx.saved_tensors
     return grad_output, grad_output
@@ -369,14 +384,12 @@ class ReLU(Operator):
     """
     Computes the forward pass of the ReLU operation and saves the context of the operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param input: The input tensor.
-    :type input: Tensor
-
-    :return: The result of the ReLU operation.
-    :rtype: Tensor
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    input : ndarray
+      The input ndarray of a tensor.
     """
     ctx.save_for_backward(input)
     return np.maximum(input, 0)
@@ -386,14 +399,17 @@ class ReLU(Operator):
     """
     Computes the backward pass of the ReLU operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
-    :type grad_output: Tensor
-
-    :return: The gradients of the ReLU operation.
-    :rtype: tuple of Tensor
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    grad_output : ndarray
+      The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+    
+    Returns
+    -------
+    ndarray
+      The gradients of the ReLU operation.
     """
     input, = ctx.saved_tensors
     grad_input = grad_output.copy()
@@ -404,9 +420,9 @@ register('relu', ReLU)
 
 class Dot(Operator):
   """
-  The Dot class implements the dot product operation for tensors and saves the context of the operation.
+  The Dot class implements the matrix multiplication operation for tensors and saves the context of the operation.
 
-  :note: The dot product operation is defined as :math:`f(x, y) = x \cdot y`.
+  :note: Matrix multiplication is a binary operation that produces a matrix from two matrices. For matrix multiplication, the number of columns in the first matrix must be equal to the number of rows in the second matrix.
 
   Example
   -------
@@ -419,17 +435,19 @@ class Dot(Operator):
     """
     Computes the forward pass of the dot product operation and saves the context of the operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param input: The first operand of the dot product.
-    :type input: Tensor
-
-    :param weight: The second operand of the dot product.
-    :type weight: Tensor
-
-    :return: The result of the dot product.
-    :rtype: Tensor
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    input : ndarray
+      The input ndarray of a tensor.
+    weight : ndarray
+      The weight ndarray of a tensor.
+    
+    Returns
+    -------
+    ndarray
+      The result of the dot product operation.
     """
     ctx.save_for_backward(input, weight)
     return input.dot(weight)
@@ -439,14 +457,17 @@ class Dot(Operator):
     """
     Computes the backward pass of the dot product operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
-    :type grad_output: Tensor
-
-    :return: The gradients of the dot product operation.
-    :rtype: tuple of Tensor
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    grad_output : ndarray
+      The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+    
+    Returns
+    -------
+    tuple of ndarray
+      The gradients of the dot product operation.
     """
     input, weight = ctx.saved_tensors
     grad_input = grad_output.dot(weight.T)
@@ -470,14 +491,17 @@ class Sum(Operator):
     """
     Computes the forward pass of the sum operation and saves the context of the operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param input: The input tensor.
-    :type input: Tensor
-
-    :return: The result of the sum operation.
-    :rtype: Tensor
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    input : ndarray
+      The input ndarray of a tensor.
+    
+    Returns
+    -------
+    ndarray
+      The result of the sum operation.
     """
     ctx.save_for_backward(input)
     return np.array([input.sum()])
@@ -487,19 +511,72 @@ class Sum(Operator):
     """
     Computes the backward pass of the sum operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
-    :type grad_output: Tensor
-
-    :return: The gradients of the sum operation.
-    :rtype: tuple of Tensor
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    grad_output : ndarray
+      The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+    
+    Returns
+    -------
+    ndarray
+      The gradients of the sum operation.
     """
     input, = ctx.saved_tensors
     return grad_output * np.ones_like(input)
 register('sum', Sum)
 
+class Softmax(Operator):
+  """
+  Implements the softmax operation for tensors.
+  """
+  @staticmethod
+  def forward(ctx: Operator, input: ndarray) -> ndarray:
+    """
+    Computes the forward pass of the softmax operation and saves the context of the operation.
+
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    input : ndarray
+      The input ndarray of a tensor.
+    
+    Returns
+    -------
+    ndarray
+      The result of the softmax operation.
+    """
+    exp = np.exp(input - np.max(input, axis=-1, keepdims=True))
+    output = exp / exp.sum(axis=-1, keepdims=True)
+    ctx.save_for_backward(output)
+    return output
+
+  @staticmethod
+  def backward(ctx: Operator, grad_output: ndarray) -> ndarray:
+      """
+      Computes the backward pass of the softmax operation.
+
+      Parameters
+      ----------
+      ctx : Operator
+        The context of the operation.
+      grad_output : ndarray
+        The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+      
+      Returns
+      -------
+      ndarray
+        The gradients of the softmax operation.
+      
+      """
+      output, = ctx.saved_tensors
+      d_softmax = output * (1 - output)  # Diagonal part of the Jacobian
+      jacobian = -output[..., None] * output[:, None, :]  # Off-diagonal part
+      jacobian[:, np.arange(output.shape[1]), np.arange(output.shape[1])] = d_softmax  # Combine diagonal
+      return np.einsum('ij,ijk->ik', grad_output, jacobian)
+register('softmax', Softmax)
 
 class LogSoftmax(Operator):
   """
@@ -517,14 +594,18 @@ class LogSoftmax(Operator):
     """
     Computes the forward pass of the log softmax operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    input : ndarray
+      The input ndarray of a tensor.
 
-    :param input: The input tensor.
-    :type input: Tensor
+    Returns
+    -------
+    ndarray
+      The result of the log softmax operation.
 
-    :return: The result of the log softmax operation.
-    :rtype: Tensor
     """
     def logsumexp(x):
       c = x.max(axis=1)
@@ -538,14 +619,17 @@ class LogSoftmax(Operator):
     """
     Computes the backward pass of the log softmax operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
-    :type grad_output: Tensor
-
-    :return: The gradients of the log softmax operation.
-    :rtype: tuple of Tensor
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    grad_output : ndarray
+      The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+    
+    Returns
+    -------
+    ndarray
+      The gradients of the log softmax operation.
     """
     output, = ctx.saved_tensors
     return grad_output - np.exp(output)*grad_output.sum(axis=1).reshape((-1, 1))
@@ -558,6 +642,24 @@ class MSE(Operator):
   """
   @staticmethod
   def forward(ctx: Operator, input: ndarray, target: ndarray) -> ndarray:
+    """
+    Computes the forward pass and saves tensors for backward pass.
+
+    Parameters
+    ----------
+    ctx : Operator
+        The context of the operation.
+    input : ndarray
+        The input tensor.
+    target : ndarray
+        The target tensor.
+    
+    Returns
+    -------
+    ndarray
+        The mean squared error between input and target.
+    """
+
     ctx.save_for_backward(input, target)
     return np.array((input - target)**2)
 
@@ -592,23 +694,23 @@ class Conv2d(Operator):
     """
     Computes the forward pass of the 2D convolution operation and saves the context of the operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param input: The input tensor.
-    :type input: Tensor
-
-    :param weight: The weight tensor.
-    :type weight: Tensor
-
-    :param padding: The padding of the operation.
-    :type padding: int
-
-    :param stride: The stride of the operation.
-    :type stride: int
-
-    :return: The result of the 2D convolution operation.
-    :rtype: Tensor
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    input : ndarray
+      The input tensor.
+    weight : ndarray
+      The weight tensor.
+    padding : int
+      The amount of padding to apply to the input tensor.
+    stride : int
+      The stride of the convolution operation.
+    
+    Returns
+    -------
+    ndarray
+      The result of the 2D convolution operation.
     """
     ctx.save_for_backward(input, weight, padding, stride)
 
@@ -636,14 +738,17 @@ class Conv2d(Operator):
     """
     Computes the backward pass of the 2D convolution operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
-    :type grad_output: Tensor
-
-    :return: The gradients of the 2D convolution operation.
-    :rtype: tuple of Tensor
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    grad_output : ndarray
+      The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+    
+    Returns
+    -------
+    tuple of ndarray
+      The gradients of the 2D convolution operation.
     """
     input, weight, padding, stride = ctx.saved_tensors
     
@@ -683,17 +788,19 @@ class Reshape(Operator):
     """
     Computes the forward pass of the reshape operation and saves the context of the operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param x: The input tensor.
-    :type x: ndarray
-
-    :param shape: Reshape the tensor x to this shape.
-    :type shape: tuple
-
-    :return: The result of the reshape operation.
-    :rtype: ndarray
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    x : ndarray
+      The input tensor.
+    shape : tuple
+      The new shape of the tensor.
+    
+    Returns
+    -------
+    ndarray
+      The result of the reshape operation.
     """
     ctx.operands = (ctx.operands[0],)
     ctx.save_for_backward(x.shape)
@@ -703,14 +810,18 @@ class Reshape(Operator):
     """
     Computes the backward pass of the reshape operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
-    :type grad_output: ndarray
-
-    :return: The gradients of the reshape operation.
-    :rtype: tuple of ndarray
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    grad_output : ndarray
+      The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+    
+    Returns
+    -------
+    ndarray
+      The gradients of the reshape operation.
+    
     """
     original_shape, = ctx.saved_tensors
     return grad_output.reshape(original_shape)
@@ -734,17 +845,19 @@ class MAE(Operator):
     """
     Computes the forward pass of the MAE operation and saves the context of the operation.
 
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param input: The first operand of the MAE operation.
-    :type input: ndarray
-
-    :param target: The second operand of the MAE operation.
-    :type target: ndarray
-
-    :return: The result of the MAE operation.
-    :rtype: ndarray
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    input : ndarray
+      The input tensor.
+    target : ndarray
+      The target tensor.
+    
+    Returns
+    -------
+    ndarray
+      The result of the MAE operation.
     """
     ctx.save_for_backward(input, target)
     return np.abs(input - target)
@@ -752,19 +865,130 @@ class MAE(Operator):
   @staticmethod
   def backward(ctx: Operator, grad_output: ndarray) -> Tuple[ndarray, ndarray]:
     """
-    Computes the backward pass of the MAE operation.
-
-    :param ctx: The context of the operation.
-    :type ctx: Operator
-
-    :param grad_output: The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
-    :type grad_output: ndarray
-
-    :return: The gradients of the MAE operation.
-    :rtype: tuple of ndarray
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    grad_output : ndarray
+      The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+    
+    Returns
+    -------
+    tuple of ndarray
+      The gradients of the MAE operation.
     """
     input, target = ctx.saved_tensors
     grad_input = grad_output * np.sign(input - target)
     grad_target = grad_output * -np.sign(input - target)
     return grad_input, grad_target
 register('mae', MAE)
+
+class Exp(Operator):
+  """
+  Implements the exponential operation for tensors.
+
+  This class is a subclass of Operator
+
+  :note: The exponential operation is defined as :math:`f(x) = e^x`.
+
+  Example
+  -------
+  >>> x = Tensor([1, 2, 3])
+  >>> print(x.exp())  # Example output: Tensor([2.71828183, 7.3890561 , 20.08553692])
+  """
+  @staticmethod
+  def forward(ctx: Operator, input: ndarray) -> ndarray:
+    """
+    Computes the forward pass of the exponential operation and saves the context of the operation.
+
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    input : ndarray
+      The input tensor.
+    
+    Returns
+    -------
+    ndarray
+      The result of the exponential operation.
+    
+    """
+    ctx.save_for_backward(input)
+    return np.exp(input)
+
+  @staticmethod
+  def backward(ctx: Operator, grad_output: ndarray) -> ndarray:
+    """
+    Computes the backward pass of the exponential operation.
+
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    grad_output : ndarray
+      The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+    
+    Returns
+    -------
+    ndarray
+      The gradients of the exponential operation.
+    """
+    input, = ctx.saved_tensors
+    return grad_output * np.exp(input)
+register('exp', Exp)
+
+class Log(Operator):
+  """
+  Implements the natural logarithm operation for tensors.
+
+  This class is a subclass of Operator
+
+  :note: The natural logarithm operation is defined as :math:`f(x) = \log(x)`.
+
+  Example
+  -------
+
+  >>> x = Tensor([1, 2, 3])
+  >>> print(x.log())  # Example output: Tensor([0., 0.69314718, 1.09861229])
+  """
+  @staticmethod
+  def forward(ctx: Operator, input: ndarray) -> ndarray:
+    """
+    Computes the forward pass of the natural logarithm operation and saves the context of the operation.
+
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    input : ndarray
+      The input tensor.
+    
+    Returns
+    -------
+    ndarray
+      The result of the natural logarithm operation.
+    """
+    ctx.save_for_backward(input)
+    return np.log(input)
+
+  @staticmethod
+  def backward(ctx: Operator, grad_output: ndarray) -> ndarray:
+    """
+    Computes the backward pass of the natural logarithm operation.
+
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    grad_output : ndarray
+      The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+    
+    Returns
+    -------
+    ndarray
+      The gradients of the natural logarithm operation.
+    """
+    input, = ctx.saved_tensors
+    return grad_output / input
+register('log', Log)

@@ -100,12 +100,15 @@ class Layer:
   def step(self, optimizer: Optimizer, lr: float = 1e-3, weight_decay: Optional[float] = 0.0):
     """
     Calls the step function of the optimizer on the parameters of all the layers.
-    :param optimizer: optimizer to use
-    :type optimizer: Optimizer
-    :param lr: learning rate
-    :type lr: float
-    :param weight_decay: weight decay (L2 penalty)
-    :type weight_decay: float
+
+    Parameters
+    ----------
+    optimizer : Optimizer
+        The optimizer to use for updating the parameters.
+    lr : float, default=1e-3
+        The learning rate for the optimizer.
+    weight_decay : float, optional, default=0.0
+        The weight decay (L2 penalty) for the optimizer.
     """
     for p in self.params.values():
       if p.grad.shape != p.data.shape:
@@ -113,7 +116,15 @@ class Layer:
         p.grad = p.grad.mean(axis=0)
     optim = optimizer(self.params.values(), lr, weight_decay)
     optim.step()
+    #  set gradients to zero
+    self.zero_grad()
 
+  def zero_grad(self):
+      """
+      Sets the gradient of all the parameters to zero.
+      """
+      for p in self.params.values():
+          p.grad.fill(0)
 class Linear(Layer):
   """
   Linear Neural Network Layer
@@ -135,11 +146,15 @@ class Linear(Layer):
     """
     Performs a linear transformation on the input tensor and Linear parameters and returns the output tensor.
 
-    :param x: input tensor
-    :type x: Tensor
-
-    :return: output tensor
-    :rtype: Tensor
+    Parameters
+    ----------
+    x : Tensor
+        The input tensor.
+    
+    Returns
+    -------
+    Tensor
+        The output tensor.
     """
     x = x.dot(self.params["LinearW"])
     x = x.add(self.params["LinearB"])
@@ -149,8 +164,15 @@ class Linear(Layer):
     """
     Moves the parameters of the layer to the specified device.
 
-    :param device: device to move the parameters to
-    :type device: str (either "cpu" or "cuda")
+    Parameters
+    ----------
+    device : str
+        The device to move the parameters to.
+    
+    Returns
+    -------
+    Linear
+        The layer with the parameters moved to the specified device.
     """
     for name, p in self.params.items():
       self.params[name] = p.to(device)
@@ -191,11 +213,15 @@ class Conv2d(Layer):
     """
     Performs a 2D convolution on the input tensor and Conv2d parameters and returns the output tensor.
 
-    :param x: input tensor
-    :type x: Tensor
-
-    :return: output tensor
-    :rtype: Tensor
+    Parameters
+    ----------
+    x : Tensor
+        The input tensor.
+    
+    Returns
+    -------
+    Tensor
+        The output tensor.
     """
     output = x.conv2d(self.params["Conv2dW"], self.padding, self.stride)
     return output
@@ -203,9 +229,14 @@ class Conv2d(Layer):
   def to(self, device: str):
     """
     Moves the parameters of the layer to the specified device.
-
-    :param device: device to move the parameters to
-    :type device: str (either "cpu" or "cuda")
+    Parameters
+    ----------
+    device : str
+        The device to move the parameters to.
+    Returns
+    -------
+    Linear
+        The layer with the parameters moved to the specified device.
     """
     for name, p in self.params.items():
       self.params[name] = p.to(device)
@@ -214,6 +245,10 @@ class Conv2d(Layer):
 class ReShape():
   """
   Layer for reshaping the input tensor to the specified shape
+
+  Attributes
+  ----------
+  shape (tuple): shape to reshape the input tensor to
   """
   def __init__(self, shape: tuple) -> None:
      self.shape = shape
@@ -221,9 +256,14 @@ class ReShape():
   def __call__(self, x: Tensor) -> Tensor:
       """
       Reshapes the input tensor to the specified shape
-
-      :param x: input tensor
-      :type x: Tensor
+      Parameters
+      ----------
+      x : Tensor
+          The input tensor.
+      Returns
+      -------
+      Tensor
+          The output tensor.
       """
       return x.reshape(self.shape)
 class ReLU():
@@ -233,9 +273,14 @@ class ReLU():
   def __call__(self, x: Tensor) -> Tensor:
     """
     Applies the ReLU activation function to the input tensor
-
-    :param x: input tensor
-    :type x: Tensor
+    Parameters
+    ----------
+    x : Tensor
+        The input tensor.
+    Returns
+    -------
+    Tensor
+        The output tensor.
     """
     return x.relu()
   
@@ -246,9 +291,14 @@ class LogSoftmax():
   def __call__(self, x: Tensor) -> Tensor:
     """
     Applies the LogSoftmax activation function to the input tensor
-
-    :param x: input tensor
-    :type x: Tensor
+    Parameters
+    ----------
+    x : Tensor
+        The input tensor.
+    Returns
+    -------
+    Tensor
+        The output tensor.
     """
     return x.logsoftmax()
   
@@ -281,12 +331,14 @@ class Sequential:
   def forward(self, x: Tensor):
     """
     Performs a forward pass on the input tensor through all the layers and returns the output tensor.
-
-    :param x: input tensor
-    :type x: Tensor
-
-    :return: output tensor
-    :rtype: Tensor
+    Parameters
+    ----------
+    x : Tensor
+        The input tensor.
+    Returns
+    -------
+    Tensor
+        The output tensor.
     """
     for layer in self.layers:
       x = layer(x)
@@ -295,9 +347,10 @@ class Sequential:
     # WIP
     """
     Saves the model parameters to the specified path.
-
-    :param path: path to save the model parameters to
-    :type path: str
+    Parameters
+    ----------
+    path : str
+        The path to save the model parameters to.
     """
     model_dict = {}
     for i, l in enumerate(self.layers):
@@ -308,10 +361,14 @@ class Sequential:
   def step(self, lr, optimizer: Optimizer, weight_decay: Optional[float] = 0.0):
     """
     Calls the step function of the optimizer on the parameters of all the layers.
-    :param optimizer: optimizer to use
-    :type optimizer: Optimizer
-    :param lr: learning rate
-    :type lr: float
+    Parameters
+    ----------
+    lr : float
+        The learning rate for the optimizer.
+    optimizer : Optimizer
+        The optimizer to use for updating the parameters.
+    weight_decay : float, optional, default=0.0
+        The weight decay (L2 penalty) for the optimizer.
     """
     for layer in self.layers:
       if isinstance(layer, Layer):
@@ -320,12 +377,14 @@ class Sequential:
   def to(self, device: str):
     """
     Moves the parameters of the model to the specified device.
-
-    :param device: device to move the parameters to
-    :type device: str (either "cpu" or "cuda")
-
-    :return: self
-    :rtype: Sequential
+    Parameters
+    ----------
+    device : str
+        The device to move the parameters to.
+    Returns
+    -------
+    Sequential
+        The model with the parameters moved to the specified device.
     """
     for layer in self.layers:
       if isinstance(layer, Layer):

@@ -17,6 +17,7 @@ model: nn.Sequential = nn.Sequential(
     nn.Linear(4608, 1024),
     nn.ReLU(),
     nn.Linear(1024, 10),
+    nn.LogSoftmax()
 )
 
 
@@ -25,12 +26,11 @@ def train(num_epochs: int = 10):
         inp = Tensor(np.expand_dims(inp, axis=1))
         targets = Tensor(np.eye(10)[targets])
         output = model.forward(inp)
-        loss = output.mse(targets)
-        loss = loss.mean()
+        loss = output.mul(targets).mean()
         loss.backward()
         if i == 0:
             loss.draw_graph(locals())
-        model.step(lr = 0.001, weight_decay=0.0001, optimizer=nn.SGD)
+        model.step(lr = 0.01, weight_decay=0.0001, optimizer=nn.SGD)
         print(f"loss {loss.data}")
         if i == num_epochs:
             break

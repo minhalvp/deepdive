@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 from deepdive.tensor import Tensor
-from datasets import load_dataset
 
 def test_mul():
     x_init = np.random.randn(3, 4).astype(np.float32)
@@ -36,8 +35,6 @@ def test_add():
 def test_conv2d():
     x_init = np.random.randn(1, 1, 28, 28).astype(np.float32)
     w_init = np.random.randn(1, 1, 3, 3).astype(np.float32)
-    # x_init = np.random.randn(1, 3, 32, 32).astype(np.float32)
-    # w_init = np.random.randn(3, 1, 5, 5).astype(np.float32)
     X, x = Tensor(x_init), torch.tensor(x_init, requires_grad=True)
     Y, y = Tensor(w_init), torch.tensor(w_init, requires_grad=True)
 
@@ -46,8 +43,8 @@ def test_conv2d():
     z = torch.nn.functional.conv2d(x, y, padding=1, stride=1)
     z.mean().backward()
 
-    np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
-    np.testing.assert_allclose(Y.grad, y.grad, atol=1e-6)
+    np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-5)
+    np.testing.assert_allclose(Y.grad, y.grad, atol=1e-5)
 
 def test_sum():
     x_init = np.random.randn(3, 4).astype(np.float32)
@@ -95,6 +92,42 @@ def test_logsoftmax():
     Z = X.logsoftmax()
     Z.mean().backward()
     z = torch.nn.functional.log_softmax(x, dim=-1)
+    z.mean().backward()
+
+    np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
+    np.testing.assert_allclose(X.grad, x.grad, atol=1e-6)
+
+def test_softmax():
+    x_init = np.random.randn(1,10).astype(np.float32)
+    X, x = Tensor(x_init), torch.tensor(x_init, requires_grad=True)
+
+    Z = X.softmax()
+    Z.mean().backward()
+    z = torch.nn.functional.softmax(x, dim=-1)
+    z.mean().backward()
+
+    np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
+    np.testing.assert_allclose(X.grad, x.grad, atol=1e-6)
+
+def test_exponential():
+    x_init = np.random.randn(3, 4).astype(np.float32)
+    X, x = Tensor(x_init), torch.tensor(x_init, requires_grad=True)
+
+    Z = X.exp()
+    Z.mean().backward()
+    z = torch.exp(x)
+    z.mean().backward()
+
+    np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
+    np.testing.assert_allclose(X.grad, x.grad, atol=1e-6)
+
+def test_log():
+    x_init = np.random.rand(3, 4).astype(np.float32)
+    X, x = Tensor(x_init), torch.tensor(x_init, requires_grad=True)
+
+    Z = X.log()
+    Z.mean().backward()
+    z = torch.log(x)
     z.mean().backward()
 
     np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)

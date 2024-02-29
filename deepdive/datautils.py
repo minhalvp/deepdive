@@ -10,15 +10,20 @@ import numpy as np
 
 class DataLoader:
     """
-    DataLoader for HuggingFace Datasets
-
+    DataLoader for HuggingFace Datasets. Huggingface Datasets are a simple way to load and process datasets. Well known datasets like MNIST, IMDB, etc. are available in the HuggingFace Datasets library.
+    
     Attributes
     ----------
-    dataset (DatasetDict): HuggingFace Dataset
-    bs (int): Batch Size
-    shuffle (bool): Whether to shuffle the dataset
-    batches (list): List of batches
-    batch_index (int): Current batch index
+    dataset : DatasetDict
+        HuggingFace Dataset
+    bs : int
+        Batch Size
+    shuffle : bool
+        Whether to shuffle the dataset
+    batches : list
+        List of batches
+    batch_index : int
+        Current batch index
 
     Example:
     -------
