@@ -113,7 +113,7 @@ class Tensor:
       else:
         tensor.grad += gradient
 
-      tensor.backward(False)
+      tensor.backward(allow_fill=False)
 
   def mean(self) -> 'Tensor':
       """
@@ -246,6 +246,7 @@ class Operator:
     ret._ctx = ctx
     return ret
 
+
 def register(name, fxn):
   """
   Adds a method to the Tensor class. The new method is a partial application of the `apply` method of the `fxn` object.
@@ -267,6 +268,58 @@ def register(name, fxn):
   """
   setattr(Tensor, name, partialmethod(fxn.apply, fxn))
 
+class Div(Operator):
+  """
+  The Div class implements the division operation for tensors and saves the context of the operation.
+
+  :note: The division operation is defined as :math:`f(x, y) = x / y`.
+
+  Example
+  -------
+  >>> x = Tensor([1, 2, 3])
+  >>> y = Tensor([4, 5, 6])
+  >>> print(x.div(y))  # prints: [0.25, 0.4, 0.5]
+  """
+  @staticmethod
+  def forward(ctx, x, y) -> ndarray:
+    """
+    Computes the forward pass of the division operation and saves the context of the operation.
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    x : Tensor
+      The dividend.
+    y : Tensor
+      The divisor.
+    Returns
+    -------
+    ndarray
+      The result of the division operation
+    """
+    ctx.save_for_backward(x, y)
+    return x / y
+  
+  @staticmethod
+  def backward(ctx, grad_output) -> Tuple[ndarray, ndarray]:
+    """
+    Computes the backward pass of the division operation.
+
+    Parameters
+    ----------
+    ctx : Operator
+      The context of the operation.
+    grad_output : Tensor
+      The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+    
+    Returns
+    -------
+    tuple of ndarray
+      The gradients of the division operation.
+    """
+    x, y = ctx.saved_tensors
+    return grad_output / y, -x * grad_output / y**2
+register('div', Div)
 class Mul(Operator):
   """
   The Mul class implements the hadamard product operation for tensors and saves the context of the operation.
