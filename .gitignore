@@ -7,3 +7,4 @@ build
 dist
 deepdive_ml.egg-info
 docs
+mnist_model

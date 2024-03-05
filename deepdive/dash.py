@@ -1,5 +1,7 @@
 # Use Plotext to create a terminal Dashboard to show realtime training info e.g. loss
 import plotext as plt
+
+
 class Dash:
     def __init__(self, num_metrics: int) -> None:
         self.num_metrics = num_metrics

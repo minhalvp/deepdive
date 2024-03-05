@@ -8,10 +8,11 @@ import numpy as np
 # - batch_size = Int
 # - Shuffle = Bool
 
+
 class DataLoader:
     """
     DataLoader for HuggingFace Datasets. Huggingface Datasets are a simple way to load and process datasets. Well known datasets like MNIST, IMDB, etc. are available in the HuggingFace Datasets library.
-    
+
     Attributes
     ----------
     dataset : DatasetDict
@@ -34,6 +35,7 @@ class DataLoader:
     >>> for i, (input, targets) in enumerate(dataloader):
     ...     print(input.shape, targets.shape) # (32, 28, 28) (32,)
     """
+
     def __init__(self, dataset: DatasetDict, batch_size: int = 1, shuffle: bool = False) -> None:
         self.dataset = dataset
         self.bs = batch_size
@@ -47,9 +49,11 @@ class DataLoader:
         Returns a list of batches from self.dataset
         """
         num_batches, last_bs = divmod(len(self.dataset), self.bs)
-        batches = [self.dataset.select(range(i*self.bs, (i+1)*self.bs)) for i in range(num_batches)]
+        batches = [self.dataset.select(
+            range(i*self.bs, (i+1)*self.bs)) for i in range(num_batches)]
         if last_bs != 0:
-            batches.append(self.dataset.select(range(num_batches*self.bs, num_batches*self.bs + last_bs)))
+            batches.append(self.dataset.select(
+                range(num_batches*self.bs, num_batches*self.bs + last_bs)))
         return batches
 
     def shuffle(self):
@@ -61,11 +65,12 @@ class DataLoader:
         for i in range(len(arr) - 1, 0, -1):
             j = random.randint(0, i)
             arr[i], arr[j] = arr[j], arr[i]
-            
+
         self.dataset = Dataset.from_list(arr)
+
     def __iter__(self):
         return self
-    
+
     def __len__(self):
         """
         Returns the number of batches
@@ -89,5 +94,6 @@ class DataLoader:
         batch = self.batches[self.batch_index]
         self.batch_index += 1
         return_values = [batch[feature] for feature in batch.features.keys()]
-        return_values = [np.array(return_value) for return_value in return_values]
+        return_values = [np.array(return_value)
+                         for return_value in return_values]
         return *return_values,

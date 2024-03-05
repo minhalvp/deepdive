@@ -30,12 +30,13 @@ def train(num_epochs: int = 10):
         loss.backward()
         if i == 0:
             loss.draw_graph(locals())
-        model.step(lr = 0.01, weight_decay=0.0001, optimizer=nn.SGD)
+        model.step(lr=0.01, weight_decay=0.0001, optimizer=nn.SGD)
         print(f"loss {loss.data}")
         if i == num_epochs:
             break
 
-def test_accuracy(num_tests = 100):
+
+def test_accuracy(num_tests=100):
     accuracy = []
     for i in range(num_tests):
         inp, targets = mnist["test"][i]['image'], mnist["test"][i]['label']
@@ -47,6 +48,7 @@ def test_accuracy(num_tests = 100):
     accuracy = np.array(accuracy)
     accuracy = accuracy.mean()
     return accuracy
+
 
 train(10)
 print(test_accuracy())
