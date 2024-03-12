@@ -993,7 +993,61 @@ class MAE(Operator):
 
 register('mae', MAE)
 
+class Sigmoid(Operator):
+    """
+    Implements the sigmoid operation for tensors.
 
+    This class is a subclass of Operator
+
+    :note: The sigmoid operation is defined as :math:`f(x) = \frac{1}{1 + e^{-x}}`.
+
+    Example
+    -------
+    >>> x = Tensor([1, 2, 3])
+    >>> print(x.sigmoid())  # Example output: Tensor([0.73105858, 0.88079708, 0.95257413])
+    """
+    @staticmethod
+    def forward(ctx: Operator, input: ndarray) -> ndarray:
+        """
+        Computes the forward pass of the sigmoid operation and saves the context of the operation.
+
+        Parameters
+        ----------
+        ctx : Operator
+          The context of the operation.
+        input : ndarray
+          The input tensor.
+
+        Returns
+        -------
+        ndarray
+          The result of the sigmoid operation.
+        """
+        output = 1 / (1 + np.exp(-input))
+        ctx.save_for_backward(output)
+        return output
+
+    @staticmethod
+    def backward(ctx: Operator, grad_output: ndarray) -> ndarray:
+        """
+        Computes the backward pass of the sigmoid operation.
+
+        Parameters
+        ----------
+        ctx : Operator
+          The context of the operation.
+        grad_output : ndarray
+          The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+
+        Returns
+        -------
+        ndarray
+          The gradients of the sigmoid operation.
+        """
+        output, = ctx.saved_tensors
+        return grad_output * output * (1 - output)
+
+register('sigmoid', Sigmoid)
 class Exp(Operator):
     """
     Implements the exponential operation for tensors.
@@ -1108,3 +1162,74 @@ class Log(Operator):
 
 
 register('log', Log)
+
+class LayerNorm(Operator):
+    """
+    Implements the Layer Normalization operation for tensors.
+
+    This class is a subclass of Operator
+
+    :note: The Layer Normalization operation is defined as :math:`f(x) = \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} * \gamma + \beta`.
+
+    Example
+    -------
+    >>> x = Tensor([1, 2, 3])
+    >>> print(x.layernorm())  # Example output: Tensor([0., 1., 2.])
+    """
+
+    @staticmethod
+    def forward(ctx: Operator, input: ndarray, gamma: ndarray, beta: ndarray, epsilon: float = 1e-5) -> ndarray:
+        """
+        Computes the forward pass of the Layer Normalization operation and saves the context of the operation.
+
+        Parameters
+        ----------
+        ctx : Operator
+          The context of the operation.
+        input : ndarray
+          The input tensor.
+        gamma : ndarray
+          The gamma tensor.
+        beta : ndarray
+          The beta tensor.
+        epsilon : float
+          The epsilon value used to avoid division by zero.
+
+        Returns
+        -------
+        ndarray
+          The result of the Layer Normalization operation.
+        """
+        ctx.save_for_backward(input, gamma, beta, epsilon)
+        mean = np.mean(input, axis=-1, keepdims=True)
+        variance = np.var(input, axis=-1, keepdims=True)
+        output = (input - mean) / np.sqrt(variance + epsilon)
+        output = output * gamma + beta
+        return output
+    
+    @staticmethod
+    def backward(ctx: Operator, grad_output: ndarray) -> Tuple[ndarray, ndarray, ndarray]:
+        """
+        Computes the backward pass of the Layer Normalization operation.
+
+        Parameters
+        ----------
+        ctx : Operator
+          The context of the operation.
+        grad_output : ndarray
+          The gradient of the loss with respect to the current layer's output. Used to compute gradients for the layer's inputs (if needed) and weights.
+
+        Returns
+        -------
+        tuple of ndarray
+          The gradients of the Layer Normalization operation.
+        """
+        input, gamma, beta, epsilon = ctx.saved_tensors
+        mean = np.mean(input, axis=-1, keepdims=True)
+        variance = np.var(input, axis=-1, keepdims=True)
+        grad_input = grad_output * gamma / np.sqrt(variance + epsilon)
+        grad_gamma = np.sum(grad_output * (input - mean) / np.sqrt(variance + epsilon), axis=-1, keepdims=True)
+        grad_beta = np.sum(grad_output, axis=-1, keepdims=True)
+        return grad_input, grad_gamma, grad_beta
+
+register('layernorm', LayerNorm)

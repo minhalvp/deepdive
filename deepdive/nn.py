@@ -292,6 +292,64 @@ class Conv2d(Layer):
         for name, p in self.params.items():
             self.params[name] = p.to(device)
         return self
+    
+class LayerNorm(Layer):
+    """
+    Layer for applying Layer Normalization
+
+    Attributes
+    ----------
+    normalized_shape (int): size of the normalized shape
+    eps (float): term added to the denominator to improve numerical stability
+    """
+
+    def __init__(self, normalized_shape: int, eps: float = 1e-5):
+        super().__init__()
+        self.normalized_shape = normalized_shape
+        self.eps = eps
+        self.weight = np.ones(shape=(normalized_shape,))
+        self.bias = np.zeros(shape=(normalized_shape,))
+        self.params = {
+            "LayerNormGamma": Tensor(self.weight),
+            "LayerNormBeta": Tensor(self.bias)
+        }
+
+    def __call__(self, x: Tensor) -> Tensor:
+        """
+        Applies Layer Normalization to the input tensor and returns the output tensor.
+
+        Parameters
+        ----------
+        x : Tensor
+            The input tensor.
+
+        Returns
+        -------
+        Tensor
+            The output tensor.
+        """
+        return x.layernorm(self.params["LayerNormGamma"], self.params["LayerNormBeta"], self.eps)
+
+    def __str__(self) -> str:
+        return f"LayerNorm({self.normalized_shape})"
+
+    def to(self, device: str):
+        """
+        Moves the parameters of the layer to the specified device.
+
+        Parameters
+        ----------
+        device : str
+            The device to move the parameters to.
+
+        Returns
+        -------
+        LayerNorm
+            The layer with the parameters moved to the specified device.
+        """
+        for name, p in self.params.items():
+            self.params[name] = p.to(device)
+        return self
 
 
 class ReShape():
@@ -533,8 +591,21 @@ class Sequential:
 
 def load_from_arc(model_dir: str):
     """
-    Load model architecture from a model directory
+    Load model architecture from a model directory.
 
+    The directory should contain a file named "model.arc" that describes the model architecture.
+    Each line in "model.arc" should contain the name of a layer followed by its arguments in parentheses.
+    For example, a line could be "Linear(10, 20)" for a Linear layer with 10 input features and 20 output features.
+
+    The directory should also contain .npy files for the weights of each layer. The file names should be in the format "layer_{i}_{param}.npy",
+    where {i} is the index of the layer (starting from 0) and {param} is the name of the parameter (e.g., "LinearW" or "Conv2dB").
+    Example Model Directory Structure:
+        - model_dir
+            - model.arc
+            - layer_0_LinearW.npy
+            - layer_0_LinearB.npy
+            - layer_2_LinearW.npy
+            - layer_2_LinearB.npy
     Parameters
     ----------
     model_dir : str
@@ -544,6 +615,15 @@ def load_from_arc(model_dir: str):
     -------
     Sequential
         The model with the architecture loaded from the specified directory.
+
+    Example
+    -------
+    >>> model = load_from_arc("/path/to/model_dir")
+    >>> print(model)
+    Linear(10, 20),
+    ReLU(),
+    Linear(20, 10),
+    LogSoftmax()
     """
     layers = []
     with open(os.path.join(model_dir, "model.arc"), "r") as f:
