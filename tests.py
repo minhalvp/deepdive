@@ -142,3 +142,27 @@ def test_log():
 
     np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
     np.testing.assert_allclose(X.grad, x.grad, atol=1e-6)
+
+def test_sigmoid():
+    x_init = np.random.randn(3, 4).astype(np.float32)
+    X, x = Tensor(x_init), torch.tensor(x_init, requires_grad=True)
+
+    Z = X.sigmoid()
+    Z.mean().backward()
+    z = torch.sigmoid(x)
+    z.mean().backward()
+
+    np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
+    np.testing.assert_allclose(X.grad, x.grad, atol=1e-6)
+
+def test_layernorm():
+    x_init = np.random.randn(3, 4).astype(np.float32)
+    X, x = Tensor(x_init), torch.tensor(x_init, requires_grad=True)
+
+    Z = X.layernorm()
+    Z.mean().backward()
+    z = torch.nn.functional.layer_norm(x, x.size()[1:])
+    z.mean().backward()
+
+    np.testing.assert_allclose(Z.data, z.detach().numpy(), atol=1e-6)
+    np.testing.assert_allclose(X.grad, x.grad, atol=1e-6)
